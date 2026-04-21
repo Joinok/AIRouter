@@ -26,7 +26,7 @@ val appModule = module {
     // === Room Database & DAOs ===
     single<AppDatabase> {
         Room.databaseBuilder(get(), AppDatabase::class.java, "airouter.db")
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
             .build()
     }
     single<SessionDao> { get<AppDatabase>().sessionDao() }
@@ -52,7 +52,7 @@ val appModule = module {
 
     // === Repositories (Singleton) ===
     single { SessionRepository(get(), get(), get()) }
-    single { ProviderRepository(get()) }
+    single { ProviderRepository(get(), get()) }
     single { ChatRepository(get()) }
 
     // === ViewModels ===
@@ -69,7 +69,7 @@ val appModule = module {
     }
 
     viewModel { (savedStateHandle: androidx.lifecycle.SavedStateHandle) ->
-        com.airouter.ui.screen.provider.ProviderEditViewModel(savedStateHandle, get())
+        com.airouter.ui.screen.provider.ProviderEditViewModel(savedStateHandle, get(), get())
     }
 
     viewModel { (savedStateHandle: androidx.lifecycle.SavedStateHandle) ->

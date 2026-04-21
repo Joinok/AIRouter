@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.airouter.app-mergeDebugResources-67:/values-land/values-land.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\8.11.1\\transforms\\72319b39c42805266ca5dc1c96edab55\\transformed\\appcompat-1.7.0\\res\\values-land\\values-land.xml",
+                    "from": {
+                        "startLines": "2,3,4",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,125,196",
+                        "endColumns": "69,70,67",
+                        "endOffsets": "120,191,259"
+                    }
+                }
+            ]
+        }
+    ]
+}

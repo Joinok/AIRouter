@@ -1,5 +1,8 @@
 package com.airouter.data.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class AiModel(
     val modelId: String,
     val displayName: String,

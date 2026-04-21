@@ -7,7 +7,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -21,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Webhook
@@ -48,6 +56,7 @@ import com.airouter.ui.screen.chat.ChatScreen
 import com.airouter.ui.screen.home.HomeScreen
 import com.airouter.ui.screen.home.HomeViewModel
 import com.airouter.ui.screen.home.SelectableModel
+import com.airouter.ui.screen.home.ProviderGroup
 import com.airouter.ui.screen.provider.ProviderEditScreen
 import com.airouter.ui.screen.provider.ProviderListScreen
 import com.airouter.ui.screen.settings.SettingsScreen
@@ -71,7 +80,8 @@ fun AppNavigation(modifier: Modifier = Modifier) {
 
     // 模型选择 Sheet 状态
     val showModelPicker by homeViewModel.showModelPicker.collectAsState()
-    val selectableModels by homeViewModel.selectableModels.collectAsState()
+    val providerGroups by homeViewModel.providerGroups.collectAsState()
+    val selectedProviderGroup by homeViewModel.selectedProviderGroup.collectAsState()
 
     // 纯 Box 容器，不使用 Scaffold
     // IME 完全由各页面自己在 View 层处理
@@ -80,7 +90,13 @@ fun AppNavigation(modifier: Modifier = Modifier) {
         NavHost(
             navController = navController,
             startDestination = Screen.Home.route,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (showBottomBar) Modifier.navigationBarsPadding()
+                    else Modifier
+                )
+                .padding(bottom = if (showBottomBar) 80.dp else 0.dp)
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
@@ -162,7 +178,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             }
         }
 
-        // 模型选择 Sheet —— 渲染在 NavigationBar 上方
+        // 模型选择 Sheet —— 二级界面：先选 Provider，再选模型
         if (showModelPicker) {
             ModalBottomSheet(
                 onDismissRequest = { homeViewModel.dismissModelPicker() },
@@ -174,65 +190,148 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                         .fillMaxWidth()
                         .navigationBarsPadding()
                 ) {
-                    if (selectableModels.isEmpty()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = "还没有配置模型",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "请先到模型页面配置至少一个 API Key",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = {
-                                homeViewModel.dismissModelPicker()
-                                navController.navigate(Screen.ProviderList.route)
-                            }) {
-                                Text("去配置")
+                    when {
+                        // 未配置任何 Provider
+                        providerGroups.isEmpty() -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text(
+                                    text = "还没有配置模型",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "请先到模型页面配置至少一个 API Key",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(onClick = {
+                                    homeViewModel.dismissModelPicker()
+                                    navController.navigate(Screen.ProviderList.route)
+                                }) {
+                                    Text("去配置")
+                                }
                             }
                         }
-                    } else {
-                        Text(
-                            text = "选择模型",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            modifier = Modifier.padding(start = 16.dp, bottom = 16.dp),
-                        )
 
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 400.dp),
-                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            val grouped = selectableModels.groupBy { it.provider.name }
-                            grouped.forEach { (providerName, models) ->
-                                item {
-                                    Text(
-                                        text = providerName,
-                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                        // 二级：已选 Provider，展示该 Provider 下的模型列表
+                        selectedProviderGroup != null -> {
+                            val group = selectedProviderGroup!!
+                            // 标题栏：返回按钮 + Provider 名
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 4.dp, end = 16.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                IconButton(onClick = { homeViewModel.backToProviderList() }) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                                }
+                                Text(
+                                    text = group.provider.name,
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                )
+                            }
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 480.dp),
+                                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                items(group.models) { model ->
+                                    ListItem(
+                                        headlineContent = {
+                                            Text(
+                                                text = model.displayName,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                            )
+                                        },
+                                        supportingContent = {
+                                            val ctxK = model.contextLength / 1024
+                                            val suffix = if (model.supportsVision) " · 支持图片" else ""
+                                            Text(
+                                                text = "${ctxK}K 上下文${suffix}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        },
+                                        modifier = Modifier.clickable {
+                                            homeViewModel.selectModel(
+                                                SelectableModel(group.provider, model)
+                                            )
+                                        }
+                                    )
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 16.dp),
+                                        thickness = 0.5.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant,
                                     )
                                 }
-                                items(models) { sm ->
-                                    ListItem(
-                                        headlineContent = { Text(sm.model.displayName) },
-                                        supportingContent = {
-                                            val ctxK = sm.model.contextLength / 1024
-                                            val suffix = if (sm.model.supportsVision) " · 支持图片" else ""
-                                            Text("${sm.model.modelId} · ${ctxK}K 上下文${suffix}")
-                                        },
-                                        modifier = Modifier.clickable { homeViewModel.selectModel(sm) }
-                                    )
+                            }
+                        }
+
+                        // 一级：Provider 列表
+                        else -> {
+                            Text(
+                                text = "选择模型",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                modifier = Modifier.padding(start = 16.dp, bottom = 12.dp),
+                            )
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 480.dp),
+                                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                items(providerGroups) { group ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { homeViewModel.selectProviderGroup(group) },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        ),
+                                        shape = MaterialTheme.shapes.medium,
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = group.provider.name,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = "${group.models.size} 个模型可用",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowBack,
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .padding(start = 8.dp)
+                                                    // 镜像翻转，变成"向右箭头"
+                                                    .then(
+                                                        Modifier.graphicsLayer { rotationZ = 180f }
+                                                    ),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

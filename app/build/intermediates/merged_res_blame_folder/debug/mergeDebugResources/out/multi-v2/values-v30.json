@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.airouter.app-mergeDebugResources-67:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\Administrator\\.gradle\\caches\\8.11.1\\transforms\\a72f0cde376e1eee6e3064f0dcb12cf5\\transformed\\material3-release\\res\\values-v30\\values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "72",
+                        "endOffsets": "123"
+                    }
+                }
+            ]
+        }
+    ]
+}

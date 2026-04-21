@@ -18,7 +18,19 @@ android {
         versionName = "1.1.0"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "airouter_debug"
+            keyAlias = "airouter_debug"
+            keyPassword = "airouter_debug"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

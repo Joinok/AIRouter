@@ -3,14 +3,17 @@ package com.airouter.ui.screen.provider
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.airouter.data.model.AiModel
 import com.airouter.data.model.Provider
 import com.airouter.data.repository.ProviderRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 
 class ProviderEditViewModel(
     savedStateHandle: SavedStateHandle,
     private val providerRepository: ProviderRepository,
+    private val okHttpClient: OkHttpClient,
 ) : ViewModel() {
 
     private val providerId: String = savedStateHandle["providerId"] ?: ""
@@ -36,9 +39,17 @@ class ProviderEditViewModel(
     private val _saved = MutableStateFlow(false)
     val saved: StateFlow<Boolean> = _saved.asStateFlow()
 
-    val models: StateFlow<List<com.airouter.data.model.AiModel>> = _provider
-        .map { it?.supportedModels ?: emptyList() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _isFetchingModels = MutableStateFlow(false)
+    val isFetchingModels: StateFlow<Boolean> = _isFetchingModels.asStateFlow()
+
+    private val _fetchModelsError = MutableStateFlow<String?>(null)
+    val fetchModelsError: StateFlow<String?> = _fetchModelsError.asStateFlow()
+
+    private val _fetchedModels = MutableStateFlow<List<AiModel>?>(null)
+
+    val models: StateFlow<List<AiModel>> = combine(_provider, _fetchedModels) { provider, fetched ->
+        fetched ?: provider?.supportedModels ?: emptyList()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         viewModelScope.launch {
@@ -92,6 +103,44 @@ class ProviderEditViewModel(
 
             providerRepository.updateProviderConfig(provider)
             _saved.value = true
+        }
+    }
+
+    /**
+     * 从 /models 接口拉取最新模型列表
+     */
+    fun fetchModels() {
+        viewModelScope.launch {
+            _isFetchingModels.value = true
+            _fetchModelsError.value = null
+            try {
+                val provider = _provider.value?.copy(
+                    apiKey = _apiKey.value,
+                    customBaseUrl = _customBaseUrl.value,
+                ) ?: run {
+                    _fetchModelsError.value = "Provider 未找到"
+                    return@launch
+                }
+
+                if (_apiKey.value.isBlank()) {
+                    _fetchModelsError.value = "请先填写 API Key"
+                    return@launch
+                }
+
+                val result = providerRepository.fetchModels(provider, okHttpClient)
+                if (result != null && result.isNotEmpty()) {
+                    _fetchedModels.value = result
+                    // 同时刷新 provider 引用
+                    val updated = providerRepository.getProviderById(providerId)
+                    _provider.value = updated
+                } else {
+                    _fetchModelsError.value = "未获取到模型列表，请检查 API Key 和网络"
+                }
+            } catch (e: Exception) {
+                _fetchModelsError.value = "拉取失败：${e.message}"
+            } finally {
+                _isFetchingModels.value = false
+            }
         }
     }
 }

@@ -118,6 +118,19 @@ object BuiltInProviders {
             )
         ),
         Provider(
+            id = "minimax",
+            name = "MiniMax",
+            type = ProviderType.OPENAI_COMPATIBLE,
+            defaultBaseUrl = "https://api.minimax.chat/v1",
+            isBuiltIn = true,
+            supportedModels = listOf(
+                AiModel("MiniMax-Text-01", "MiniMax-Text-01", contextLength = 1000000,
+                    inputPricePerMToken = 4.0f, outputPricePerMToken = 16.0f),
+                AiModel("abab7", "abab7", contextLength = 245760,
+                    inputPricePerMToken = 1.0f, outputPricePerMToken = 4.0f),
+            )
+        ),
+        Provider(
             id = "openrouter",
             name = "OpenRouter",
             type = ProviderType.OPENAI_COMPATIBLE,

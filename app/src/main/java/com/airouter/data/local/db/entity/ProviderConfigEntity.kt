@@ -9,4 +9,6 @@ data class ProviderConfigEntity(
     val apiKey: String,
     val customBaseUrl: String,
     val enabled: Boolean,
+    /** 从 /models 接口拉取的模型 JSON，格式: [{"modelId":"xxx","displayName":"xxx",...},...] */
+    val fetchedModelsJson: String? = null,
 )
