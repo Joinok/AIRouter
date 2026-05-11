@@ -67,6 +67,9 @@ object BuiltInProviders {
             isBuiltIn = true,
             supportsStreamOptions = false,
             supportedModels = listOf(
+                AiModel("kimi-k2.6", "Kimi K2.6", contextLength = 256000,
+                    inputPricePerMToken = 2.0f, outputPricePerMToken = 2.0f,
+                    supportsVision = true, fixedTemperature = 1f, fixedTopP = 0.95f, minMaxTokens = 16384),
                 AiModel("kimi-k2.5", "Kimi K2.5", contextLength = 256000,
                     inputPricePerMToken = 2.0f, outputPricePerMToken = 2.0f,
                     supportsVision = true, fixedTemperature = 1f, fixedTopP = 0.95f),

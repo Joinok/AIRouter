@@ -128,16 +128,29 @@ class ProviderEditViewModel(
                 }
 
                 val result = providerRepository.fetchModels(provider, okHttpClient)
-                if (result != null && result.isNotEmpty()) {
+                if (result.isNotEmpty()) {
                     _fetchedModels.value = result
                     // 同时刷新 provider 引用
                     val updated = providerRepository.getProviderById(providerId)
                     _provider.value = updated
                 } else {
-                    _fetchModelsError.value = "未获取到模型列表，请检查 API Key 和网络"
+                    // /models 接口不支持，返回空列表 → 静默用内置模型，不弹错误
+                    val builtInCount = provider.supportedModels.size
+                    if (builtInCount > 0) {
+                        _fetchedModels.value = emptyList() // 触发用内置模型
+                    } else {
+                        _fetchModelsError.value = "API 返回模型列表为空，且无内置模型"
+                    }
                 }
             } catch (e: Exception) {
-                _fetchModelsError.value = "拉取失败：${e.message}"
+                val errorMsg = e.message ?: e::class.simpleName ?: "未知错误"
+                // 如果拉取失败但内置有模型，显示提示但不阻断
+                val builtInCount = _provider.value?.supportedModels?.size ?: 0
+                if (builtInCount > 0) {
+                    _fetchModelsError.value = "动态拉取失败（$errorMsg），使用内置 ${builtInCount} 个模型"
+                } else {
+                    _fetchModelsError.value = "拉取失败：$errorMsg"
+                }
             } finally {
                 _isFetchingModels.value = false
             }

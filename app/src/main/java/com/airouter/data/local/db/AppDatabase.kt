@@ -18,7 +18,7 @@ import com.airouter.data.local.db.entity.SessionEntity
         ProviderConfigEntity::class,
     ],
     version = 5,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun sessionDao(): SessionDao

@@ -6,9 +6,11 @@ import com.airouter.data.local.prefs.BuiltInProviders
 import com.airouter.data.model.AiModel
 import com.airouter.data.model.Provider
 import com.airouter.domain.provider.ProviderFactory
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 
@@ -105,19 +107,25 @@ class ProviderRepository(
      * 从 /models 接口拉取模型列表并保存到数据库。
      * 返回拉取到的模型列表，失败返回 null。
      */
-    suspend fun fetchModels(provider: Provider, client: OkHttpClient): List<AiModel>? {
-        return try {
-            // 清空内置列表，强制走 API 拉取
-            val providerWithoutBuiltIn = provider.copy(supportedModels = emptyList())
-            val apiProvider = ProviderFactory.create(
-                providerWithoutBuiltIn.copy(
-                    apiKey = provider.apiKey.takeIf { it.isNotBlank() } ?: provider.apiKey,
-                    customBaseUrl = provider.customBaseUrl.takeIf { it.isNotBlank() } ?: provider.customBaseUrl,
-                ),
-                client
-            )
-            val models = apiProvider.listModels()
+    suspend fun fetchModels(provider: Provider, client: OkHttpClient): List<AiModel> {
+        return withContext(Dispatchers.IO) {
+            doFetchModels(provider, client)
+        }
+    }
 
+    private suspend fun doFetchModels(provider: Provider, client: OkHttpClient): List<AiModel> {
+        // 清空内置列表，强制走 API 拉取
+        val providerWithoutBuiltIn = provider.copy(supportedModels = emptyList())
+        val apiProvider = ProviderFactory.create(
+            providerWithoutBuiltIn.copy(
+                apiKey = provider.apiKey.takeIf { it.isNotBlank() } ?: provider.apiKey,
+                customBaseUrl = provider.customBaseUrl.takeIf { it.isNotBlank() } ?: provider.customBaseUrl,
+            ),
+            client
+        )
+
+        try {
+            val models = apiProvider.listModels()
             if (models.isNotEmpty()) {
                 // 保存到数据库
                 val existing = providerConfigDao.getConfig(provider.id)
@@ -135,9 +143,11 @@ class ProviderRepository(
                     )
                 )
             }
-            models
+            return models
         } catch (e: Exception) {
-            null
+            // /models 接口不支持（404 或其他错误），静默回退到空列表
+            // 调用方通过判断 isEmpty() 来决定是否使用内置模型
+            return emptyList()
         }
     }
 
@@ -170,6 +180,7 @@ class ProviderRepository(
                         supportsVision = fm.supportsVision || builtInMatch.supportsVision,
                         fixedTemperature = fm.fixedTemperature ?: builtInMatch.fixedTemperature,
                         fixedTopP = fm.fixedTopP ?: builtInMatch.fixedTopP,
+                        minMaxTokens = fm.minMaxTokens ?: builtInMatch.minMaxTokens,
                     )
                 } else {
                     fm

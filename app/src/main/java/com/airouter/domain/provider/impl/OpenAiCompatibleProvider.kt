@@ -1,6 +1,8 @@
 package com.airouter.domain.provider.impl
 
+import android.util.Log
 import com.airouter.data.model.AiModel
+import com.airouter.debug.DebugLog
 import com.airouter.data.model.ChatChunk
 import com.airouter.data.model.ChatRequest
 import com.airouter.data.model.ChatResponse
@@ -45,7 +47,7 @@ class OpenAiCompatibleProvider(
             return provider.supportedModels
         }
 
-        // 否则尝试从 API 获取
+        // 从 /models API 获取
         try {
             val request = Request.Builder()
                 .url("$baseUrl/models")
@@ -54,15 +56,31 @@ class OpenAiCompatibleProvider(
                 .build()
 
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) return emptyList()
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string() ?: ""
+                throw Exception("HTTP ${response.code}: $errorBody")
+            }
 
-            val body = response.body?.string() ?: return emptyList()
-            val modelsResp = json.decodeFromString<com.airouter.data.remote.dto.OpenAiModelsResponse>(body)
+            val body = response.body?.string() ?: throw Exception("响应体为空")
+            val modelsResp = try {
+                json.decodeFromString<com.airouter.data.remote.dto.OpenAiModelsResponse>(body)
+            } catch (e: Exception) {
+                throw Exception("解析响应失败: ${e.message}\n原始响应: ${body.take(500)}")
+            }
             return modelsResp.data?.map { model ->
                 AiModel(modelId = model.id, displayName = model.id)
-            } ?: emptyList()
+            } ?: throw Exception("模型列表为空，响应: ${body.take(200)}")
+        } catch (e: java.net.UnknownHostException) {
+            throw Exception("DNS 解析失败: ${baseUrl}")
+        } catch (e: java.net.SocketTimeoutException) {
+            throw Exception("连接超时")
+        } catch (e: java.net.ConnectException) {
+            throw Exception("连接失败: ${e.message ?: "网络不可达"}")
+        } catch (e: javax.net.ssl.SSLException) {
+            throw Exception("SSL 错误: ${e.message}")
         } catch (e: Exception) {
-            return emptyList()
+            if (e.message != null) throw e
+            throw Exception("网络错误: ${e::class.simpleName}")
         }
     }
 
@@ -73,18 +91,26 @@ class OpenAiCompatibleProvider(
         val model = provider.supportedModels.find { it.modelId == request.modelId }
         val temperature = model?.fixedTemperature ?: request.temperature
         val topP = model?.fixedTopP ?: request.topP
+        // minMaxTokens 是推理模型建议的最小值，取其与用户设置的较大者
+        val maxTokens = maxOf(model?.minMaxTokens ?: 0, request.maxTokens ?: 0)
+        val logMsg = "chatStream: model=${request.modelId}, request.maxTokens=${request.maxTokens}, minMaxTokens=${model?.minMaxTokens}, effective maxTokens=$maxTokens, temperature=$temperature, topP=$topP"
+        Log.d("OpenAiCompat", logMsg)
+        DebugLog.log("API", logMsg)
 
         val openAiRequest = OpenAiChatRequest(
             model = request.modelId,
             messages = openAiMessages,
             temperature = temperature,
-            max_tokens = request.maxTokens,
+            max_tokens = maxTokens,
             top_p = topP,
             stream = true,
             stream_options = if (provider.supportsStreamOptions) StreamOptions() else null,
         )
 
         val body = json.encodeToString(OpenAiChatRequest.serializer(), openAiRequest)
+        DebugLog.log("API", "POST $baseUrl/chat/completions")
+        DebugLog.log("API", "Request body: ${body.take(500)}")
+        Log.d("OpenAiCompat", "SSE request body: $body")
 
         val headers = mapOf(
             "Content-Type" to "application/json",
@@ -92,19 +118,30 @@ class OpenAiCompatibleProvider(
         )
 
         val sseParser = SseParser(client, json)
+        var flowCompleted = false  // 确保外层 flow 一定结束
         sseParser.streamChat("$baseUrl/chat/completions", headers, body)
             .collect { event ->
                 when (event) {
                     is SseEvent.Chunk -> {
                         emit(ChatChunk(
                             content = event.content,
+                            isReasoning = event.isReasoning,
                             finishReason = event.finishReason,
                             usage = event.usage,
                         ))
                     }
-                    is SseEvent.Done -> return@collect
-                    is SseEvent.Error -> throw Exception(event.message)
-                    is SseEvent.Connected -> { /* 连接成功，忽略 */ }
+                    is SseEvent.Done -> {
+                        DebugLog.log("SSE", "✓ [DONE]")
+                        flowCompleted = true
+                        return@collect
+                    }
+                    is SseEvent.Error -> {
+                        DebugLog.log("SSE", "✗ Error: ${event.message}")
+                        throw Exception(event.message)
+                    }
+                    is SseEvent.Connected -> {
+                        DebugLog.log("SSE", "● Connected to $baseUrl/chat/completions")
+                    }
                 }
             }
     }
@@ -115,12 +152,13 @@ class OpenAiCompatibleProvider(
         val model = provider.supportedModels.find { it.modelId == request.modelId }
         val temperature = model?.fixedTemperature ?: request.temperature
         val topP = model?.fixedTopP ?: request.topP
+        val maxTokens = model?.minMaxTokens ?: request.maxTokens
 
         val openAiRequest = OpenAiChatRequest(
             model = request.modelId,
             messages = openAiMessages,
             temperature = temperature,
-            max_tokens = request.maxTokens,
+            max_tokens = maxTokens,
             top_p = topP,
             stream = false,
         )

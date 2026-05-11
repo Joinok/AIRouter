@@ -17,6 +17,7 @@ fun SettingsScreen(
 ) {
     val streamEnabled by viewModel.streamEnabled.collectAsState()
     val showTokenUsage by viewModel.showTokenUsage.collectAsState()
+    val debugLogEnabled by viewModel.debugLogEnabled.collectAsState()
 
     Scaffold(
         topBar = {
@@ -37,7 +38,7 @@ fun SettingsScreen(
                     Text("AiRouter", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "v1.0.0 · 多模型 AI 对话测试客户端",
+                        text = "v1.3.0 · 多模型 AI 对话测试客户端",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -66,6 +67,13 @@ fun SettingsScreen(
                         subtitle = "在消息下方显示 Token 消耗统计",
                         checked = showTokenUsage,
                         onCheckedChange = { viewModel.setShowTokenUsage(it) }
+                    )
+                    HorizontalDivider()
+                    SwitchSettingItem(
+                        title = "调试日志",
+                        subtitle = "显示网络请求和 SSE 事件详情",
+                        checked = debugLogEnabled,
+                        onCheckedChange = { viewModel.setDebugLogEnabled(it) }
                     )
                 }
             }

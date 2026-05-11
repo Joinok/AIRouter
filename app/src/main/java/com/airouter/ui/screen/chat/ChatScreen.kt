@@ -34,12 +34,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.airouter.data.local.AttachmentStorage
 import com.airouter.data.local.prefs.AppConfig
 import com.airouter.data.model.ChatMessage
 import com.airouter.data.model.MessageAttachment
 import com.airouter.data.model.MessageRole
+import com.airouter.debug.DebugLog
 import com.airouter.rememberImeHeight
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -60,11 +62,6 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val context = LocalContext.current
     val attachmentStorage = remember { AttachmentStorage(context) }
-
-    // 初始化 ViewModel 的 storage
-    LaunchedEffect(Unit) {
-        viewModel.initStorage(context)
-    }
 
     // View 层直接读 IME 高度，不受 NavHost insets 消费影响
     val imeHeight = rememberImeHeight()
@@ -111,8 +108,20 @@ fun ChatScreen(
 
     val canSend = (inputText.isNotBlank() || pendingAttachments.isNotEmpty()) && !isSending
 
+    // 调试日志面板状态
+    var showDebugPanel by remember { mutableStateOf(false) }
+    val debugEnabled by remember { derivedStateOf { appConfig.debugLogEnabled } }
+    val debugLogs by DebugLog.logs.collectAsState()
+    val debugListState = rememberLazyListState()
+
+    // 调试日志开关同步
+    LaunchedEffect(debugEnabled) {
+        DebugLog.enabled = debugEnabled
+    }
+
     // 微信式布局：TopBar 固定，消息区被键盘挤压
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+    Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         // === 顶层：TopBar，不受键盘影响 ===
         TopAppBar(
             windowInsets = WindowInsets(0, 0, 0, 0),
@@ -257,6 +266,78 @@ fun ChatScreen(
             }
         }
     }
+
+    // 调试日志浮动按钮（仅调试模式开启时显示）
+    if (debugEnabled) {
+        FloatingActionButton(
+            onClick = { showDebugPanel = !showDebugPanel },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 80.dp)
+                .size(40.dp),
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ) {
+            Text("🔧", fontSize = 16.sp)
+        }
+
+        // 调试日志面板（底部弹出）
+        if (showDebugPanel) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.5f),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                shadowElevation = 16.dp,
+            ) {
+                Column {
+                    // 标题栏
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("调试日志", style = MaterialTheme.typography.titleSmall)
+                        Row {
+                            TextButton(onClick = { DebugLog.clear() }) {
+                                Text("清空")
+                            }
+                            TextButton(onClick = { showDebugPanel = false }) {
+                                Text("关闭")
+                            }
+                        }
+                    }
+                    HorizontalDivider()
+                    // 日志列表
+                    LazyColumn(
+                        state = debugListState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        items(debugLogs) { entry ->
+                            Text(
+                                text = "${entry.time} [${entry.tag}] ${entry.message}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                color = when {
+                                    entry.message.startsWith("✗") -> MaterialTheme.colorScheme.error
+                                    entry.message.startsWith("●") -> MaterialTheme.colorScheme.primary
+                                    entry.message.startsWith("✓") -> MaterialTheme.colorScheme.tertiary
+                                    entry.tag == "🧠" -> MaterialTheme.colorScheme.secondary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    } // end debugEnabled
+    } // end Box
 }
 
 /**
@@ -469,6 +550,26 @@ private fun MessageBubble(
                                 }
                             }
                         }
+                    }
+                }
+
+                // 推理中提示（Kimi K2.6 等思考模型）
+                if (message.isReasoning) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(10.dp),
+                            strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "思考中...",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
                     }
                 }
 

@@ -15,4 +15,6 @@ data class AiModel(
     val fixedTemperature: Float? = null,
     /** 该模型是否锁定 top_p（如 Kimi K2.5 只允许 0.95），非 null 时强制使用此值 */
     val fixedTopP: Float? = null,
+    /** 推理模型建议的最小 max_tokens（如 Kimi K2.6 建议 >= 16000），非 null 时强制使用此值 */
+    val minMaxTokens: Int? = null,
 )

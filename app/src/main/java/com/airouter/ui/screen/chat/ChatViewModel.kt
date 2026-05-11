@@ -6,18 +6,16 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.airouter.data.local.AttachmentStorage
-import com.airouter.data.model.AttachmentType
-import com.airouter.data.model.ChatMessage
-import com.airouter.data.model.ChatRequest
-import com.airouter.data.model.MessageAttachment
-import com.airouter.data.model.MessageRole
-import com.airouter.data.model.TokenUsage
+import com.airouter.data.model.*
 import com.airouter.data.repository.ChatRepository
 import com.airouter.data.repository.ProviderRepository
 import com.airouter.data.repository.SessionRepository
+import com.airouter.domain.usecase.SendChatMessageUseCase
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlin.time.Duration.Companion.seconds
 import java.util.UUID
 
 
@@ -25,7 +23,8 @@ class ChatViewModel(
     savedStateHandle: SavedStateHandle,
     private val sessionRepository: SessionRepository,
     private val providerRepository: ProviderRepository,
-    private val chatRepository: ChatRepository,
+    private val sendChatMessageUseCase: SendChatMessageUseCase,
+    private val attachmentStorage: AttachmentStorage,
 ) : ViewModel() {
 
     private val sessionId: String = savedStateHandle["sessionId"] ?: ""
@@ -45,22 +44,13 @@ class ChatViewModel(
     private val _pendingAttachments = MutableStateFlow<List<MessageAttachment>>(emptyList())
     val pendingAttachments: StateFlow<List<MessageAttachment>> = _pendingAttachments.asStateFlow()
 
-    // UI 显示用内存 StateFlow，不再依赖 Room Flow
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
-
-    private var attachmentStorage: AttachmentStorage? = null
-
-    fun initStorage(context: Context) {
-        attachmentStorage = AttachmentStorage(context)
-    }
 
     init {
         viewModelScope.launch {
             val session = sessionRepository.getSession(sessionId)
             _currentModel.value = session?.modelId
-
-            // 从数据库加载历史消息到内存
             _messages.value = sessionRepository.getMessagesBySessionOnce(sessionId)
         }
     }
@@ -80,9 +70,6 @@ class ChatViewModel(
         }
     }
 
-    /**
-     * 处理从系统选择器返回的 Uri 列表
-     */
     fun handleSelectedUris(uris: List<Uri>, context: Context) {
         val storage = attachmentStorage ?: AttachmentStorage(context)
         val newAttachments = uris.mapNotNull { uri ->
@@ -129,27 +116,22 @@ class ChatViewModel(
                 return@launch
             }
 
-            // 构造用户消息
             val userMessage = ChatMessage(
                 sessionId = sessionId,
                 role = MessageRole.USER,
                 content = content,
                 attachments = currentAttachments,
             )
-            // 写入数据库（一次性）
             sessionRepository.addMessage(userMessage)
 
-            // 清空输入和附件
             _inputText.value = ""
             _pendingAttachments.value = emptyList()
 
-            // 如果是第一条消息，用消息内容作为标题
             if (session.messageCount == 0) {
                 val title = content.take(30) + if (content.length > 30) "..." else ""
                 sessionRepository.updateSessionTitle(sessionId, title)
             }
 
-            // 创建 AI 占位消息（先写数据库占位，保证消息顺序）
             val assistantMessageId = UUID.randomUUID().toString()
             val assistantMessage = ChatMessage(
                 id = assistantMessageId,
@@ -159,87 +141,57 @@ class ChatViewModel(
                 modelId = session.modelId,
                 providerId = session.providerId,
                 isStreaming = true,
+                isReasoning = false,
             )
             sessionRepository.addMessage(assistantMessage)
-
-            // 更新内存中的消息列表（UI 立即看到）
             _messages.update { it + userMessage + assistantMessage }
 
             _isSending.value = true
 
+            var reasoningContent = StringBuilder()
             var fullContent = StringBuilder()
             var lastUsage: TokenUsage? = null
             var hasError = false
             var errorMsgStr: String? = null
 
             try {
-                // 获取历史消息，并在发送前把附件的 localPath 转为 base64 data url
-                val storage = attachmentStorage ?: return@launch
-                val history = _messages.value
-                    .filter { !it.isError }
-                    .filterNot { it.role == MessageRole.ASSISTANT && it.content.isBlank() }
-                    .map { msg ->
-                        msg.copy(
-                            id = "",
-                            sessionId = "",
-                            attachments = msg.attachments.map { att ->
-                                att.copy(localPath = "data:${att.mimeType};base64,${storage.readAsBase64(att.localPath)}")
-                            }
-                        )
-                    }
-                    .let { fixMessageOrder(it) }
-
-                val request = ChatRequest(
-                    apiKey = provider.apiKey,
-                    baseUrl = provider.effectiveBaseUrl,
-                    modelId = session.modelId,
-                    messages = history,
-                    temperature = session.temperature,
-                    maxTokens = session.maxTokens,
-                    systemPrompt = session.systemPrompt,
-                    stream = true,
-                )
-
-                fullContent = StringBuilder()
-
-                // SSE flow 消费：SseParser 已在回调线程上累积内容，chunk.content 是完整文本
-                // 注意：不用 sample 节流。高速短流（如智谱 1ms 内吐完全部 chunk）
-                // 会导致 sample 窗口从未触发，fullContent 丢失。Compose 有自己的
-                // recomposition 合并机制，直接 collect 即可。
-                chatRepository.streamChat(provider, request)
+                sendChatMessageUseCase.invoke(session, userMessage, assistantMessageId)
+                    .timeout(120.seconds)  // 2分钟超时，防止 flow 永远挂起
                     .collect { chunk ->
-                        // 每个 chunk 都立即同步到 fullContent
-                        fullContent.clear()
-                        fullContent.append(chunk.content)
-                        if (chunk.usage != null) {
-                            lastUsage = chunk.usage
+                        if (chunk.isReasoning) {
+                            // 推理过程，先显示给用户
+                            reasoningContent.clear()
+                            reasoningContent.append(chunk.content)
+                            updateMessageInMemory(assistantMessageId, chunk.content, isStreaming = true, isReasoning = true)
+                        } else {
+                            // 最终答案（覆盖推理过程）
+                            fullContent.clear()
+                            fullContent.append(chunk.content)
+                            if (chunk.usage != null) lastUsage = chunk.usage
+                            updateMessageInMemory(assistantMessageId, chunk.content, isStreaming = true, isReasoning = false, usage = lastUsage)
                         }
-                        // 更新内存中的消息内容（UI 实时刷新）
-                        updateMessageInMemory(assistantMessageId, chunk.content, isStreaming = true, usage = lastUsage)
                     }
-
             } catch (e: CancellationException) {
-                // 用户退出页面或取消请求，保存已收到的内容
                 if (fullContent.isNotEmpty()) {
-                    val saved = assistantMessage.copy(
+                    sessionRepository.updateMessage(assistantMessage.copy(
                         content = fullContent.toString(),
                         isStreaming = false,
                         tokenUsage = lastUsage,
-                    )
-                    sessionRepository.updateMessage(saved)
+                    ))
                 } else {
                     sessionRepository.deleteMessage(assistantMessageId)
                     _messages.update { it.filter { msg -> msg.id != assistantMessageId } }
                 }
                 throw e
+            } catch (e: TimeoutCancellationException) {
+                // 超时保护：flow 120秒未完成
+                hasError = true
+                errorMsgStr = "响应超时，请重试"
             } catch (e: Exception) {
                 hasError = true
-                errorMsgStr = e.message
-                _errorMessage.value = "请求失败: ${e.message}"
+                errorMsgStr = e.message ?: "未知错误"
             } finally {
                 _isSending.value = false
-                // 兜底：无论正常结束还是异常（非取消），都确保 fullContent 写入数据库
-                // 这样即使 sample(50ms) 吞了最后一个 chunk，也不会丢内容
                 if (fullContent.isNotEmpty()) {
                     val finalMessage = assistantMessage.copy(
                         content = fullContent.toString(),
@@ -253,26 +205,43 @@ class ChatViewModel(
                         assistantMessageId,
                         finalMessage.content,
                         isStreaming = false,
+                        isReasoning = false,
                         isError = hasError,
                         errorMessage = errorMsgStr,
                         usage = lastUsage,
                     )
-                } else if (!hasError) {
-                    // 正常结束但没收到任何内容（不是错误也不是取消），删掉空占位
-                    sessionRepository.deleteMessage(assistantMessageId)
-                    _messages.update { it.filter { msg -> msg.id != assistantMessageId } }
+                } else {
+                    // 无内容：出错时直接把错误信息作为消息显示，正常时删除空消息
+                    val displayContent = if (hasError) "⚠️ ${errorMsgStr}" else ""
+                    val finalMessage = if (hasError) {
+                        assistantMessage.copy(
+                            content = displayContent,
+                            isStreaming = false,
+                            isError = true,
+                            errorMessage = errorMsgStr,
+                        )
+                    } else {
+                        assistantMessage.copy(isStreaming = false)
+                    }
+                    sessionRepository.updateMessage(finalMessage)
+                    updateMessageInMemory(
+                        assistantMessageId,
+                        displayContent,
+                        isStreaming = false,
+                        isReasoning = false,
+                        isError = hasError,
+                        errorMessage = if (hasError) errorMsgStr else null,
+                    )
                 }
             }
         }
     }
 
-    /**
-     * 更新内存中指定消息的内容（不触发数据库 I/O）
-     */
     private fun updateMessageInMemory(
         messageId: String,
         content: String,
         isStreaming: Boolean = true,
+        isReasoning: Boolean = false,
         usage: TokenUsage? = null,
         isError: Boolean = false,
         errorMessage: String? = null,
@@ -283,6 +252,7 @@ class ChatViewModel(
                     msg.copy(
                         content = content,
                         isStreaming = isStreaming,
+                        isReasoning = isReasoning,
                         tokenUsage = usage ?: msg.tokenUsage,
                         isError = isError,
                         errorMessage = errorMessage,
@@ -290,32 +260,5 @@ class ChatViewModel(
                 } else msg
             }
         }
-    }
-
-    /**
-     * 修复消息 role 交替顺序。
-     * 过滤掉 isError 消息后可能导致连续相同 role（如 user→user），
-     * 合并连续相同 role 的消息为一个，确保 API 兼容。
-     */
-    private fun fixMessageOrder(messages: List<ChatMessage>): List<ChatMessage> {
-        if (messages.isEmpty()) return emptyList()
-        val result = mutableListOf<ChatMessage>()
-        for (msg in messages) {
-            val last = result.lastOrNull()
-            if (last != null && last.role == msg.role) {
-                // 合并到上一条同 role 消息
-                result[result.lastIndex] = last.copy(
-                    content = buildString {
-                        append(last.content)
-                        if (last.content.isNotBlank() && msg.content.isNotBlank()) append("\n")
-                        append(msg.content)
-                    },
-                    attachments = last.attachments + msg.attachments,
-                )
-            } else {
-                result.add(msg)
-            }
-        }
-        return result
     }
 }

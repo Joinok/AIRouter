@@ -13,6 +13,7 @@ class AppConfig {
         private const val KEY_LAST_SESSION_ID = "last_session_id"
         private const val KEY_STREAM_ENABLED = "stream_enabled"
         private const val KEY_SHOW_TOKEN_USAGE = "show_token_usage"
+        private const val KEY_DEBUG_LOG_ENABLED = "debug_log_enabled"
     }
 
     var currentTheme: String
@@ -38,4 +39,8 @@ class AppConfig {
     var showTokenUsage: Boolean
         get() = mmkv.decodeBool(KEY_SHOW_TOKEN_USAGE, true)
         set(value) { mmkv.encode(KEY_SHOW_TOKEN_USAGE, value) }
+
+    var debugLogEnabled: Boolean
+        get() = mmkv.decodeBool(KEY_DEBUG_LOG_ENABLED, false)
+        set(value) { mmkv.encode(KEY_DEBUG_LOG_ENABLED, value) }
 }

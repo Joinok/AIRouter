@@ -12,6 +12,7 @@ class SettingsViewModel(
 
     val streamEnabled: StateFlow<Boolean> = MutableStateFlow(appConfig.streamEnabled)
     val showTokenUsage: StateFlow<Boolean> = MutableStateFlow(appConfig.showTokenUsage)
+    val debugLogEnabled: StateFlow<Boolean> = MutableStateFlow(appConfig.debugLogEnabled)
 
     fun setStreamEnabled(enabled: Boolean) {
         appConfig.streamEnabled = enabled
@@ -21,5 +22,10 @@ class SettingsViewModel(
     fun setShowTokenUsage(enabled: Boolean) {
         appConfig.showTokenUsage = enabled
         (showTokenUsage as MutableStateFlow).value = enabled
+    }
+
+    fun setDebugLogEnabled(enabled: Boolean) {
+        appConfig.debugLogEnabled = enabled
+        (debugLogEnabled as MutableStateFlow).value = enabled
     }
 }

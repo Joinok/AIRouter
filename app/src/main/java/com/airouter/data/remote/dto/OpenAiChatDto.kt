@@ -116,6 +116,8 @@ data class OpenAiChoice(
 data class OpenAiDelta(
     val role: String? = null,
     val content: String? = null,
+    @SerialName("reasoning_content")
+    val reasoningContent: String? = null,
 )
 
 @Serializable

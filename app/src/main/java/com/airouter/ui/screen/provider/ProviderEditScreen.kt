@@ -32,6 +32,8 @@ fun ProviderEditScreen(
     val validationResult by viewModel.validationResult.collectAsState()
     val saved by viewModel.saved.collectAsState()
     val models by viewModel.models.collectAsState()
+    val isFetchingModels by viewModel.isFetchingModels.collectAsState()
+    val fetchModelsError by viewModel.fetchModelsError.collectAsState()
 
     // 保存成功后返回
     LaunchedEffect(saved) {
@@ -91,7 +93,7 @@ fun ProviderEditScreen(
                     Text(
                         text = when (p.type) {
                             com.airouter.data.model.ProviderType.OPENAI_COMPATIBLE ->
-                                "该模型支持 OpenAI 兼容协议。只需填入 API Key 即可使用，非常简单！"
+                                "支持 OpenAI 兼容协议，填入 API Key 即可使用。\n默认接口：${p.defaultBaseUrl}"
                             else ->
                                 "请填写对应的 API Key 和接口地址。"
                         },
@@ -148,38 +150,67 @@ fun ProviderEditScreen(
                 Text(if (isValidating) "验证中..." else "验证 API Key")
             }
 
-            // Base URL（可折叠显示）
-            var showBaseUrl by remember { mutableStateOf(false) }
-            TextButton(onClick = { showBaseUrl = !showBaseUrl }) {
-                Text(if (showBaseUrl) "收起 Base URL 设置" else "自定义 Base URL（可选）")
-            }
-
-            if (showBaseUrl) {
-                Text(
-                    text = "默认：${p.defaultBaseUrl}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = customBaseUrl,
-                    onValueChange = { viewModel.updateCustomBaseUrl(it) },
-                    label = { Text("自定义 Base URL") },
-                    placeholder = { Text(p.defaultBaseUrl) },
-                    modifier = Modifier.fillMaxWidth(),
-                    supportingText = {
-                        Text("留空则使用默认地址。如需走代理或自部署，请填写完整地址。")
-                    }
-                )
-            }
+            // Base URL
+            OutlinedTextField(
+                value = customBaseUrl,
+                onValueChange = { viewModel.updateCustomBaseUrl(it) },
+                label = { Text("Base URL") },
+                placeholder = { Text(p.defaultBaseUrl) },
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = {
+                    Text("留空使用默认：${p.defaultBaseUrl}")
+                }
+            )
 
             // 支持的模型列表
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            Text(
-                text = "支持的模型",
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "支持的模型",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                TextButton(
+                    onClick = { viewModel.fetchModels() },
+                    enabled = !isFetchingModels && apiKey.isNotBlank()
+                ) {
+                    if (isFetchingModels) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "刷新模型列表",
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(if (isFetchingModels) "拉取中..." else "刷新")
+                }
+            }
             Spacer(modifier = Modifier.height(8.dp))
+
+            // 错误提示
+            if (fetchModelsError != null) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    )
+                ) {
+                    Text(
+                        text = fetchModelsError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             models.forEach { model ->
                 ModelInfoRow(model = model)

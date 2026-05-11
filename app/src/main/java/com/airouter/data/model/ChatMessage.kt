@@ -12,6 +12,7 @@ data class ChatMessage(
     val timestamp: Long = System.currentTimeMillis(),
     val tokenUsage: TokenUsage? = null,
     val isStreaming: Boolean = false,
+    val isReasoning: Boolean = false,
     val isError: Boolean = false,
     val errorMessage: String? = null,
     /** 附件列表（本地文件路径），JSON 序列化存储 */
