@@ -91,7 +91,7 @@ class SseParser(
 
                     if (deltaReasoning.isNotEmpty()) {
                         reasoningBuilder.append(deltaReasoning)
-                        DebugLog.log("SSE", "🧠 reasoning +${deltaReasoning.length} → total=${reasoningBuilder.length}")
+        // DebugLog.log("SSE", "🧠 reasoning +${deltaReasoning.length} → total=${reasoningBuilder.length}")
                         Log.d("SseParser", "reasoning emitted: len=${reasoningBuilder.length}, content='${reasoningBuilder.toString().take(50)}'")
                         trySend(SseEvent.Chunk(reasoningBuilder.toString(), isReasoning = true, finishReason = null, usage = collectedUsage))
                     }
@@ -101,7 +101,7 @@ class SseParser(
                             reasoningBuilder.clear()
                         }
                         contentBuilder.append(deltaContent)
-                        DebugLog.log("SSE", "📝 content +${deltaContent.length} → total=${contentBuilder.length}")
+        // DebugLog.log("SSE", "📝 content +${deltaContent.length} → total=${contentBuilder.length}")
                         Log.d("SseParser", "content emitted: len=${contentBuilder.length}")
                         trySend(SseEvent.Chunk(contentBuilder.toString(), isReasoning = false, finishReason = null, usage = collectedUsage))
                     }
