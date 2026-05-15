@@ -10,10 +10,16 @@ class AiRouterApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        INSTANCE = this
         MMKV.initialize(this)
         startKoin {
             androidContext(this@AiRouterApp)
             modules(appModule)
         }
+    }
+
+    companion object {
+        lateinit var INSTANCE: AiRouterApp
+            private set
     }
 }

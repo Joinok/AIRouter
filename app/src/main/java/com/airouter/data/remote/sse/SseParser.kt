@@ -61,8 +61,9 @@ class SseParser(
                 Log.d("SseParser", "SSE onEvent: type=$type, data(len=${data.length})=${data.take(200)}")
                 if (data == "[DONE]") {
                     Log.d("SseParser", "SSE [DONE] received, content length=${contentBuilder.length}, reasoning length=${reasoningBuilder.length}")
-                    DebugLog.log("SSE", "✓ [DONE] content=${contentBuilder.length} reasoning=${reasoningBuilder.length}")
                     val finalContent = if (contentBuilder.isNotEmpty()) contentBuilder.toString() else reasoningBuilder.toString()
+                    val displayContent = if (finalContent.length > 300) finalContent.take(300) + "..." else finalContent
+                    DebugLog.log("SSE", "✓ [DONE] content(${finalContent.length}) = \"${displayContent}\"")
                     val isFinalReasoning = contentBuilder.isEmpty() && reasoningBuilder.isNotEmpty()
                     // 先发送最终内容（如果还没发的话），再发送 Done
                     if (finalContent.isNotEmpty()) {

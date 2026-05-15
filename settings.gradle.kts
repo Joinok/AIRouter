@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "AiRouter"
 include(":app")
+include(":lib")

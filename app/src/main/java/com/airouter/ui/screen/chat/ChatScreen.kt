@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.mikepenz.markdown.m3.Markdown
 import com.airouter.data.local.AttachmentStorage
 import com.airouter.data.local.prefs.AppConfig
 import com.airouter.data.model.ChatMessage
@@ -500,6 +501,22 @@ private fun MessageBubble(
                     }
                 }
 
+                // AI 回复中 markdown 图片解析展示（从文字内容里提取）
+                val markdownImages = parseMarkdownImages(message.content)
+                if (markdownImages.isNotEmpty()) {
+                    markdownImages.forEach { imageUrl ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        AsyncImage(
+                            model = imageUrl,
+                            contentDescription = "AI 图片",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.FillWidth,
+                        )
+                    }
+                }
+
                 // 文件附件展示
                 val fileAttachments = message.attachments.filter { !it.isImage }
                 if (fileAttachments.isNotEmpty()) {
@@ -671,4 +688,16 @@ private fun formatFileSize(bytes: Long): String {
         bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
         else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
     }
+}
+
+/**
+ * 从 markdown 文本中解析所有图片 URL，返回 URL 列表（去重）。
+ */
+private fun parseMarkdownImages(markdown: String): List<String> {
+    val regex = Regex("!\\[.*?\\]\\((.*?)\\)")
+    return regex.findAll(markdown)
+        .map { it.groupValues[1] }
+        .filter { it.isNotBlank() && (it.startsWith("http://") || it.startsWith("https://")) }
+        .distinct()
+        .toList()
 }

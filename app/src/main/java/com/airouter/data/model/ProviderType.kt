@@ -5,5 +5,6 @@ enum class ProviderType {
     BAIDU,
     DOUBAO,
     GEMINI,
-    CLAUDE
+    CLAUDE,
+    LOCAL  // 本地 LLM（llama.cpp）
 }

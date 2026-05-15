@@ -14,8 +14,8 @@ android {
         applicationId = "com.airouter"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.2.0"
+        versionCode = 10
+        versionName = "2.0.0"
     }
 
     signingConfigs {
@@ -47,6 +47,10 @@ android {
 
     kotlinOptions {
         jvmTarget = "21"
+    }
+
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
     }
 
     buildFeatures {
@@ -107,4 +111,10 @@ dependencies {
     // Markdown
     implementation(libs.compose.markdown)
     implementation(libs.compose.markdown.m3)
+
+    // Local LLM (llama.cpp)
+    implementation(project(":lib"))
+
+    // Aria (model download)
+    implementation("com.arialyy.aria:aria-core:3.8.7")
 }

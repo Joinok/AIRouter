@@ -48,5 +48,11 @@ object ProviderFactory {
                 registry[type] = defaultFactory
             }
         }
+        
+        // 注册本地 LLM Provider
+        registry[ProviderType.LOCAL] = ProviderFactoryFn { p, c ->
+            val context = com.airouter.AiRouterApp.INSTANCE
+            LocalLLMProvider(context)
+        }
     }
 }
