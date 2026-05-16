@@ -12,13 +12,20 @@ android {
         minSdk = 26
         
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+            abiFilters += listOf("arm64-v8a")
         }
         
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
-                arguments += "-DLLAMA_BUILD_COMMON=OFF"
+                arguments += "-DCMAKE_BUILD_TYPE=Release"
+                arguments += "-DBUILD_SHARED_LIBS=OFF"
+                arguments += "-DLLAMA_BUILD_TESTS=OFF"
+                arguments += "-DLLAMA_BUILD_EXAMPLES=OFF"
+                arguments += "-DLLAMA_BUILD_COMMON=ON"
+                arguments += "-DLLAMA_OPENSSL=OFF"
+                arguments += "-DGGML_NATIVE=OFF"
+                arguments += "-DGGML_LLAMAFILE=OFF"
             }
         }
     }

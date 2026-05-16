@@ -1,0 +1,31 @@
+# Gradle
+.gradle/
+build/
+app/build/
+lib/build/
+*.jar
+*.aar
+
+# Native build
+lib/.cxx/
+
+# APK
+*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models (downloaded at runtime)
+*.gguf
+*.ggml
+models/
+
+# llama.cpp - managed as git submodule
+# lib/src/main/cpp/llama.cpp/
