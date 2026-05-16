@@ -14,8 +14,8 @@ android {
         applicationId = "com.airouter"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "2.0.0"
+        versionCode = 11
+        versionName = "2.0.1"
     }
 
     signingConfigs {
@@ -115,6 +115,6 @@ dependencies {
     // Local LLM (llama.cpp)
     implementation(project(":lib"))
 
-    // Aria (model download)
-    implementation("com.arialyy.aria:aria-core:3.8.7")
+    // Aria (model download) - JitPack auth issue, temporarily disabled
+    // implementation("com.github.AriaLyy:Aria:3.8.7")
 }

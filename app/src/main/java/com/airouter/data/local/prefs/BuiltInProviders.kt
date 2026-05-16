@@ -80,6 +80,16 @@ object BuiltInProviders {
             )
         ),
         Provider(
+            id = "local",
+            name = "本地模型",
+            type = ProviderType.LOCAL,
+            defaultBaseUrl = "",
+            isBuiltIn = true,
+            supportedModels = listOf(
+                AiModel("local-qwen2.5-3b", "Qwen2.5 3B (本地)", contextLength = 4096),
+            )
+        ),
+        Provider(
             id = "ollama",
             name = "Ollama (本地)",
             type = ProviderType.OPENAI_COMPATIBLE,

@@ -1,0 +1,1 @@
+C:\Users\Administrator\.qclaw\workspace\AIRouter\lib\build\intermediates\cxx\Debug\1x471z2j\obj\arm64-v8a

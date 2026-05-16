@@ -10,4 +10,5 @@ sealed class Screen(val route: String) {
         fun createRoute(providerId: String) = "providers/$providerId"
     }
     data object Settings : Screen("settings")
+    data object LocalModel : Screen("local-model")
 }

@@ -1,0 +1,44 @@
+{
+  "buildFiles": [
+    "C:\\Users\\Administrator\\.qclaw\\workspace\\AIRouter\\lib\\src\\main\\cpp\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "F:\\sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\Administrator\\.qclaw\\workspace\\AIRouter\\lib\\.cxx\\Debug\\1x471z2j\\armeabi-v7a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "F:\\sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\Administrator\\.qclaw\\workspace\\AIRouter\\lib\\.cxx\\Debug\\1x471z2j\\armeabi-v7a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "llama::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "armeabi-v7a",
+      "artifactName": "llama",
+      "output": "C:\\Users\\Administrator\\.qclaw\\workspace\\AIRouter\\lib\\.cxx\\Debug\\1x471z2j\\armeabi-v7a\\libllama.a"
+    },
+    "llama-jni::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "armeabi-v7a",
+      "artifactName": "llama-jni",
+      "output": "C:\\Users\\Administrator\\.qclaw\\workspace\\AIRouter\\lib\\build\\intermediates\\cxx\\Debug\\1x471z2j\\obj\\armeabi-v7a\\libllama-jni.so",
+      "runtimeFiles": []
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "F:\\sdk\\ndk\\27.0.12077973\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+      "cppCompilerExecutable": "F:\\sdk\\ndk\\27.0.12077973\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

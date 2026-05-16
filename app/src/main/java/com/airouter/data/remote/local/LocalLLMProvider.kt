@@ -11,6 +11,7 @@ import com.airouter.lib.AiChat
 import com.airouter.lib.InferenceEngine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import java.io.File
 
 /**
  * 本地 LLM Provider - 使用 llama.cpp 进行本地推理
@@ -25,15 +26,43 @@ class LocalLLMProvider(
 
     private val engine: InferenceEngine = AiChat.getInferenceEngine(context)
     private var modelLoaded = false
+    private val modelPathToUse: String? by lazy {
+        modelPath ?: if (isModelExists(context)) getModelPath(context) else null
+    }
 
-    init {
-        // 如果提供了模型路径，尝试加载
-        modelPath?.let {
-            try {
-                modelLoaded = engine.loadModel(it)
-            } catch (e: Exception) {
-                modelLoaded = false
-            }
+    /**
+     * 确保模型已加载（懒加载：首次使用时尝试加载）
+     * 如果 init 时模型不存在，下载后再聊时会自动加载
+     */
+    @Synchronized
+    private fun ensureModelLoaded(): Boolean {
+        if (modelLoaded) return true
+        val path = modelPathToUse ?: return false
+        return try {
+            modelLoaded = engine.loadModel(path)
+            modelLoaded
+        } catch (e: Exception) {
+            modelLoaded = false
+            false
+        }
+    }
+
+    companion object {
+        const val MODEL_FILE_NAME = "qwen25_3b.gguf"
+
+        /**
+         * 计算模型文件路径（与 DownloadViewModel 保持一致）
+         */
+        fun getModelPath(context: Context): String {
+            val modelsDir = File(context.filesDir, "models")
+            return File(modelsDir, MODEL_FILE_NAME).absolutePath
+        }
+
+        /**
+         * 检查模型文件是否存在
+         */
+        fun isModelExists(context: Context): Boolean {
+            return File(getModelPath(context)).exists()
         }
     }
 
@@ -42,15 +71,19 @@ class LocalLLMProvider(
         return listOf(
             AiModel(
                 modelId = "local-qwen2.5-3b",
-                displayName = "Qwen2.5 3B (Local)",
-                description = "本地运行的 Qwen2.5 3B 模型"
+                displayName = "Qwen2.5 3B (Local)"
             )
         )
     }
 
     override fun chatStream(request: ChatRequest): Flow<ChatChunk> = flow {
-        if (!modelLoaded) {
-            emit(ChatChunk(content = "[ERROR] 模型未加载，请先下载并加载模型"))
+        if (!ensureModelLoaded()) {
+            val hint = if (isModelExists(context)) {
+                "[ERROR] 模型加载失败，请重启应用后重试"
+            } else {
+                "[ERROR] 模型未下载，请在设置中下载模型"
+            }
+            emit(ChatChunk(content = hint))
             return@flow
         }
 
@@ -75,9 +108,13 @@ class LocalLLMProvider(
     }
 
     override suspend fun chat(request: ChatRequest): ChatResponse {
-        if (!modelLoaded) {
+        if (!ensureModelLoaded()) {
             return ChatResponse(
-                content = "[ERROR] 模型未加载，请先下载并加载模型",
+                content = if (isModelExists(context)) {
+                    "[ERROR] 模型加载失败，请重启应用后重试"
+                } else {
+                    "[ERROR] 模型未下载，请在设置中下载模型"
+                },
                 modelId = request.modelId
             )
         }
@@ -108,8 +145,7 @@ class LocalLLMProvider(
     }
 
     override suspend fun validateApiKey(): Boolean {
-        // 本地模型不需要验证 API Key
-        return modelLoaded
+        return ensureModelLoaded()
     }
 
     /**

@@ -59,6 +59,7 @@ import com.airouter.ui.screen.home.SelectableModel
 import com.airouter.ui.screen.home.ProviderGroup
 import com.airouter.ui.screen.provider.ProviderEditScreen
 import com.airouter.ui.screen.provider.ProviderListScreen
+import com.airouter.ui.screen.local.LocalModelScreen
 import com.airouter.ui.screen.settings.SettingsScreen
 import org.koin.androidx.compose.koinViewModel
 
@@ -123,6 +124,9 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 ProviderListScreen(
                     onNavigateToEdit = { providerId ->
                         navController.navigate(Screen.ProviderEdit.createRoute(providerId))
+                    },
+                    onNavigateToLocalModel = {
+                        navController.navigate(Screen.LocalModel.route)
                     }
                 )
             }
@@ -138,6 +142,12 @@ fun AppNavigation(modifier: Modifier = Modifier) {
 
             composable(Screen.Settings.route) {
                 SettingsScreen()
+            }
+
+            composable(Screen.LocalModel.route) {
+                LocalModelScreen(
+                    onBack = { navController.popBackStack() }
+                )
             }
         }
 

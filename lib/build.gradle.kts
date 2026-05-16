@@ -14,29 +14,29 @@ android {
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
+        
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+                arguments += "-DLLAMA_BUILD_COMMON=OFF"
+            }
+        }
     }
     
     externalNativeBuild {
         cmake {
-            cppFlags += "-std=c++17"
-            arguments += "-DLLAMA_BUILD_COMMON=OFF"
+            path = file("src/main/cpp/CMakeLists.txt")
         }
     }
     
-    buildFeatures {
-        compose = true
-    }
-    
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
-    }
-    
-    kotlin {
-        jvmToolchain(21)
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
 dependencies {
     implementation(libs.okhttp)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 }

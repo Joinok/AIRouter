@@ -1,0 +1,12 @@
+[
+{
+  "directory": "C:/Users/Administrator/.qclaw/workspace/AIRouter/lib/.cxx/Debug/1x471z2j/arm64-v8a",
+  "command": "F:\\sdk\\ndk\\27.0.12077973\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=F:/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/windows-x86_64/sysroot -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fno-limit-debug-info  -fPIC -o CMakeFiles\\llama.dir\\dummy.cpp.o -c C:\\Users\\Administrator\\.qclaw\\workspace\\AIRouter\\lib\\src\\main\\cpp\\dummy.cpp",
+  "file": "C:\\Users\\Administrator\\.qclaw\\workspace\\AIRouter\\lib\\src\\main\\cpp\\dummy.cpp"
+},
+{
+  "directory": "C:/Users/Administrator/.qclaw/workspace/AIRouter/lib/.cxx/Debug/1x471z2j/arm64-v8a",
+  "command": "F:\\sdk\\ndk\\27.0.12077973\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=F:/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Dllama_jni_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fno-limit-debug-info  -fPIC -o CMakeFiles\\llama-jni.dir\\ai_chat.cpp.o -c C:\\Users\\Administrator\\.qclaw\\workspace\\AIRouter\\lib\\src\\main\\cpp\\ai_chat.cpp",
+  "file": "C:\\Users\\Administrator\\.qclaw\\workspace\\AIRouter\\lib\\src\\main\\cpp\\ai_chat.cpp"
+}
+]

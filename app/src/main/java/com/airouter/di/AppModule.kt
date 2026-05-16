@@ -82,4 +82,6 @@ val appModule = module {
     viewModel { (savedStateHandle: androidx.lifecycle.SavedStateHandle) ->
         com.airouter.ui.screen.settings.SettingsViewModel(get())
     }
+
+    viewModel { com.airouter.ui.download.DownloadViewModel(get()) }
 }

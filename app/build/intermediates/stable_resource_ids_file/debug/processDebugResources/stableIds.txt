@@ -1040,6 +1040,7 @@ com.airouter:attr/maxButtonHeight = 0x7f0300c2
 com.airouter:string/m3c_date_input_no_input_description = 0x7f0d0035
 com.airouter:id/action_bar_activity_content = 0x7f080028
 com.airouter:attr/textAppearanceListItem = 0x7f030113
+com.airouter:xml/network_security_config = 0x7f100000
 com.airouter:animator/fragment_open_exit = 0x7f020005
 com.airouter:attr/logoDescription = 0x7f0300c1
 com.airouter:attr/logo = 0x7f0300c0

@@ -17,7 +17,7 @@ data class Provider(
     val effectiveBaseUrl: String
         get() = customBaseUrl.ifBlank { defaultBaseUrl }
 
-    /** 是否已配置 API Key */
+    /** 是否已配置（本地类型不需要 API Key） */
     val isConfigured: Boolean
-        get() = apiKey.isNotBlank()
+        get() = type == ProviderType.LOCAL || apiKey.isNotBlank()
 }

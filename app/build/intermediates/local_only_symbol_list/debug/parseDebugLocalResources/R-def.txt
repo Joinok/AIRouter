@@ -3,3 +3,4 @@ local
 drawable ic_launcher_background
 drawable ic_launcher_foreground
 mipmap ic_launcher
+xml network_security_config

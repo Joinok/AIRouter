@@ -70,3 +70,4 @@ com.airouter.app-packageDebugResources-68 C:\Users\Administrator\.qclaw\workspac
 com.airouter.app-debug-69 C:\Users\Administrator\.qclaw\workspace\AIRouter\app\build\intermediates\merged_res\debug\mergeDebugResources
 com.airouter.app-debug-70 C:\Users\Administrator\.qclaw\workspace\AIRouter\app\src\debug\res
 com.airouter.app-main-71 C:\Users\Administrator\.qclaw\workspace\AIRouter\app\src\main\res
+com.airouter.app-debug-72 C:\Users\Administrator\.qclaw\workspace\AIRouter\lib\build\intermediates\packaged_res\debug\packageDebugResources

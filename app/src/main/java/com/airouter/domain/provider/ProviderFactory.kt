@@ -1,5 +1,6 @@
 ﻿package com.airouter.domain.provider
 
+import com.airouter.data.remote.local.LocalLLMProvider
 import com.airouter.data.model.Provider
 import com.airouter.data.model.ProviderType
 import com.airouter.domain.provider.impl.OpenAiCompatibleProvider
@@ -52,7 +53,7 @@ object ProviderFactory {
         // 注册本地 LLM Provider
         registry[ProviderType.LOCAL] = ProviderFactoryFn { p, c ->
             val context = com.airouter.AiRouterApp.INSTANCE
-            LocalLLMProvider(context)
+            LocalLLMProvider(context, LocalLLMProvider.getModelPath(context))
         }
     }
 }

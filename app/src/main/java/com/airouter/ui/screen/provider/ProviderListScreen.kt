@@ -11,12 +11,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.airouter.data.model.Provider
+import com.airouter.data.model.ProviderType
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProviderListScreen(
     onNavigateToEdit: (String) -> Unit,
+    onNavigateToLocalModel: () -> Unit = {},
     viewModel: ProviderListViewModel = koinViewModel(),
 ) {
     val providers by viewModel.providers.collectAsState()
@@ -46,7 +48,13 @@ fun ProviderListScreen(
             items(providers, key = { it.id }) { provider ->
                 ProviderCard(
                     provider = provider,
-                    onClick = { onNavigateToEdit(provider.id) }
+                    onClick = {
+                        if (provider.type == ProviderType.LOCAL) {
+                            onNavigateToLocalModel()
+                        } else {
+                            onNavigateToEdit(provider.id)
+                        }
+                    }
                 )
             }
         }

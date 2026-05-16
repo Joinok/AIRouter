@@ -8,4 +8,4 @@ project(llama)
 add_library(llama STATIC dummy.cpp)
 
 add_library(llama-jni SHARED ai_chat.cpp)
-target_link_libraries(llama-jni PRIVATE llama)
+target_link_libraries(llama-jni PRIVATE llama log)

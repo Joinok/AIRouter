@@ -3,7 +3,7 @@ package com.airouter.lib
 /**
  * 推理引擎自定义异常
  */
-class InferenceException(
+open class InferenceException(
     message: String,
     cause: Throwable? = null,
     val errorCode: Int = 0

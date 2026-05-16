@@ -8,6 +8,10 @@
         "source": "com.airouter.app-main-71:/drawable/ic_launcher_foreground.xml"
     },
     {
+        "merged": "com.airouter.app-debug-69:/xml_network_security_config.xml.flat",
+        "source": "com.airouter.app-main-71:/xml/network_security_config.xml"
+    },
+    {
         "merged": "com.airouter.app-debug-69:/drawable_ic_launcher_background.xml.flat",
         "source": "com.airouter.app-main-71:/drawable/ic_launcher_background.xml"
     }
