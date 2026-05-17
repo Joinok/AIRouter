@@ -14,8 +14,8 @@ android {
         applicationId = "com.airouter"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "2.0.1"
+        versionCode = 14
+        versionName = "2.0.4"
     }
 
     signingConfigs {

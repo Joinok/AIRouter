@@ -2,13 +2,17 @@ package com.airouter.ui.screen.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.airouter.AiRouterApp
 import com.airouter.data.model.AiModel
 import com.airouter.data.model.ChatSession
+import com.airouter.data.model.ModelCatalog
 import com.airouter.data.model.Provider
+import com.airouter.data.model.ProviderType
 import com.airouter.data.repository.ProviderRepository
 import com.airouter.data.repository.SessionRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.io.File
 
 data class SelectableModel(
     val provider: Provider,
@@ -54,36 +58,66 @@ class HomeViewModel(
         _createdSessionId.value = null
     }
 
+    /**
+     * 获取本地已下载的模型列表
+     */
+    private fun getLocalDownloadedModels(): List<AiModel> {
+        return try {
+            val app = AiRouterApp.INSTANCE
+            val modelsDir = File(app.filesDir, "models")
+            ModelCatalog.getDownloadedIds(modelsDir).mapNotNull { id ->
+                ModelCatalog.findById(id)?.let { entry ->
+                    AiModel(entry.id, "${entry.displayName} (本地)")
+                }
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     fun onFabClick() {
         viewModelScope.launch {
             val providers = providerRepository.getConfiguredProvidersOnce()
-            if (providers.isEmpty()) {
+            val localDownloadedModels = getLocalDownloadedModels()
+            
+            // 如果没有任何可用的 Provider（无配置 + 无本地模型）
+            if (providers.isEmpty() && localDownloadedModels.isEmpty()) {
                 _showModelPicker.value = true
                 return@launch
             }
-            val groups = providers.map { p ->
-                ProviderGroup(p, p.supportedModels)
-            }.filter { it.models.isNotEmpty() }
+
+            // 构建 Provider 分组
+            val groups = mutableListOf<ProviderGroup>()
+            
+            // 在线 Provider
+            providers.filter { it.type != ProviderType.LOCAL }.forEach { p ->
+                if (p.supportedModels.isNotEmpty()) {
+                    groups.add(ProviderGroup(p, p.supportedModels))
+                }
+            }
+
+            // 本地 Provider（已下载的模型）
+            if (localDownloadedModels.isNotEmpty()) {
+                val localProvider = providers.find { it.type == ProviderType.LOCAL }
+                    ?: Provider(
+                        id = "local",
+                        name = "本地模型",
+                        type = ProviderType.LOCAL,
+                        defaultBaseUrl = "",
+                        isBuiltIn = true,
+                        supportedModels = emptyList(),
+                    )
+                groups.add(ProviderGroup(localProvider, localDownloadedModels))
+            }
+
             if (groups.isEmpty()) {
                 _showModelPicker.value = true
                 return@launch
             }
-            // 只有一个 provider 且只有一个模型，直接创建
-            if (groups.size == 1 && groups[0].models.size == 1) {
-                val p = groups[0].provider
-                val m = groups[0].models[0]
-                val session = ChatSession(
-                    providerId = p.id,
-                    modelId = m.modelId,
-                    title = "新对话",
-                )
-                sessionRepository.createSession(session)
-                _createdSessionId.value = session.id
-            } else {
-                _providerGroups.value = groups
-                _selectedProviderGroup.value = null
-                _showModelPicker.value = true
-            }
+
+            _providerGroups.value = groups
+            _selectedProviderGroup.value = null
+            _showModelPicker.value = true
         }
     }
 

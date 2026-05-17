@@ -6,11 +6,19 @@ set(CMAKE_C_STANDARD_REQUIRED true)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 
-# llama.cpp source directory
-set(LLAMA_CPP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp)
-
-# Build llama.cpp core + common
-add_subdirectory(${LLAMA_CPP_DIR})
+# Download llama.cpp using FetchContent (instead of local submodule)
+include(FetchContent)
+FetchContent_Declare(
+    llamacpp
+    URL https://ghfast.top/https://github.com/ggml-org/llama.cpp/archive/refs/heads/master.zip
+)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
+set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(llamacpp)
 
 # JNI bridge library
 add_library(llama-jni SHARED
@@ -18,10 +26,10 @@ add_library(llama-jni SHARED
 )
 
 target_include_directories(llama-jni PRIVATE
-    ${LLAMA_CPP_DIR}/include
-    ${LLAMA_CPP_DIR}/common
-    ${LLAMA_CPP_DIR}/ggml/include
-    ${LLAMA_CPP_DIR}/ggml/src
+    ${llamacpp_SOURCE_DIR}/include
+    ${llamacpp_SOURCE_DIR}/common
+    ${llamacpp_SOURCE_DIR}/ggml/include
+    ${llamacpp_SOURCE_DIR}/ggml/src
 )
 
 target_link_libraries(llama-jni PRIVATE

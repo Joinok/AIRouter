@@ -1,2 +1,0 @@
-ninja: Entering directory `C:\Users\Administrator\.qclaw\workspace\AIRouter\lib\.cxx\Debug\1x471z2j\x86_64'
-ninja: no work to do.

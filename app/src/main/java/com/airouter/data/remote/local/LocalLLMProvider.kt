@@ -6,6 +6,7 @@ import com.airouter.data.model.ChatChunk
 import com.airouter.data.model.ChatRequest
 import com.airouter.data.model.ChatResponse
 import com.airouter.data.model.TokenUsage
+import com.airouter.data.model.ModelCatalog
 import com.airouter.domain.provider.AIProvider
 import com.airouter.lib.AiChat
 import com.airouter.lib.InferenceEngine
@@ -15,31 +16,51 @@ import java.io.File
 
 /**
  * 本地 LLM Provider - 使用 llama.cpp 进行本地推理
+ * 支持多个已下载的 GGUF 模型
  */
 class LocalLLMProvider(
     private val context: Context,
-    private val modelPath: String? = null
+    private val selectedModelId: String? = null  // 可选：指定加载哪个模型
 ) : AIProvider {
 
     override val providerId: String = "local"
     override val providerName: String = "Local LLM"
 
     private val engine: InferenceEngine = AiChat.getInferenceEngine(context)
+    private var currentModelId: String? = null
     private var modelLoaded = false
-    private val modelPathToUse: String? by lazy {
-        modelPath ?: if (isModelExists(context)) getModelPath(context) else null
+
+    /**
+     * 获取模型文件路径（通过 modelId 查找）
+     */
+    private fun getModelPathById(modelId: String): String? {
+        val entry = ModelCatalog.findById(modelId) ?: return null
+        val modelsDir = File(context.filesDir, "models")
+        val file = File(modelsDir, entry.fileName)
+        return if (file.exists()) file.absolutePath else null
     }
 
     /**
-     * 确保模型已加载（懒加载：首次使用时尝试加载）
-     * 如果 init 时模型不存在，下载后再聊时会自动加载
+     * 获取默认已下载模型的路径
      */
-    @Synchronized
-    private fun ensureModelLoaded(): Boolean {
-        if (modelLoaded) return true
-        val path = modelPathToUse ?: return false
+    private fun getDefaultDownloadedModel(): String? {
+        val modelsDir = File(context.filesDir, "models")
+        val downloaded = ModelCatalog.getDownloadedIds(modelsDir)
+        return downloaded.firstNotNullOfOrNull { getModelPathById(it) }
+    }
+
+    /**
+     * 根据 modelId 加载对应模型
+     */
+    private fun loadModelById(modelId: String?): Boolean {
+        val path = modelId?.let { getModelPathById(it) } ?: getDefaultDownloadedModel()
+            ?: return false
         return try {
+            engine.release()
             modelLoaded = engine.loadModel(path)
+            if (modelLoaded) {
+                currentModelId = modelId ?: "default"
+            }
             modelLoaded
         } catch (e: Exception) {
             modelLoaded = false
@@ -47,38 +68,36 @@ class LocalLLMProvider(
         }
     }
 
-    companion object {
-        const val MODEL_FILE_NAME = "qwen25_3b.gguf"
-
-        /**
-         * 计算模型文件路径（与 DownloadViewModel 保持一致）
-         */
-        fun getModelPath(context: Context): String {
-            val modelsDir = File(context.filesDir, "models")
-            return File(modelsDir, MODEL_FILE_NAME).absolutePath
-        }
-
-        /**
-         * 检查模型文件是否存在
-         */
-        fun isModelExists(context: Context): Boolean {
-            return File(getModelPath(context)).exists()
-        }
+    /**
+     * 确保模型已加载（懒加载）
+     */
+    @Synchronized
+    private fun ensureModelLoaded(): Boolean {
+        if (modelLoaded) return true
+        return loadModelById(selectedModelId)
     }
 
     override suspend fun listModels(): List<AiModel> {
-        // 本地模型固定返回一个模型
-        return listOf(
+        // 返回 ModelCatalog 中所有模型（让用户看到完整列表可在 picker 中选择）
+        // 未下载的模型会在聊天时提示用户下载
+        return ModelCatalog.models.map { entry ->
+            val modelsDir = File(context.filesDir, "models")
+            val isDownloaded = File(modelsDir, entry.fileName).exists()
             AiModel(
-                modelId = "local-qwen2.5-3b",
-                displayName = "Qwen2.5 3B (Local)"
+                modelId = entry.id,
+                displayName = if (isDownloaded) "${entry.displayName} (本地)" else "${entry.displayName} (未下载)"
             )
-        )
+        }
     }
 
     override fun chatStream(request: ChatRequest): Flow<ChatChunk> = flow {
-        if (!ensureModelLoaded()) {
-            val hint = if (isModelExists(context)) {
+        // 根据请求的 modelId 加载对应模型
+        val modelId = request.modelId.removePrefix("local-").takeIf { 
+            ModelCatalog.findById(it) != null 
+        }
+        
+        if (!loadModelById(modelId)) {
+            val hint = if (getDefaultDownloadedModel() != null) {
                 "[ERROR] 模型加载失败，请重启应用后重试"
             } else {
                 "[ERROR] 模型未下载，请在设置中下载模型"
@@ -97,7 +116,6 @@ class LocalLLMProvider(
                 return@flow
             }
 
-        // 发送消息并收集流式回复
         try {
             engine.sendUserPrompt(userMsg).collect { token ->
                 emit(ChatChunk(content = token))
@@ -108,9 +126,13 @@ class LocalLLMProvider(
     }
 
     override suspend fun chat(request: ChatRequest): ChatResponse {
-        if (!ensureModelLoaded()) {
+        val modelId = request.modelId.removePrefix("local-").takeIf { 
+            ModelCatalog.findById(it) != null 
+        }
+        
+        if (!loadModelById(modelId)) {
             return ChatResponse(
-                content = if (isModelExists(context)) {
+                content = if (getDefaultDownloadedModel() != null) {
                     "[ERROR] 模型加载失败，请重启应用后重试"
                 } else {
                     "[ERROR] 模型未下载，请在设置中下载模型"
@@ -125,7 +147,6 @@ class LocalLLMProvider(
             val userMsg = request.messages.lastOrNull { it.role.name.equals("USER", true) }?.content 
                 ?: return ChatResponse(content = "[ERROR] 没有找到用户消息", modelId = request.modelId)
 
-            // 对于非流式，我们收集所有 token 并拼接
             val response = StringBuilder()
             engine.sendUserPrompt(userMsg).collect { token ->
                 response.append(token)
@@ -134,7 +155,7 @@ class LocalLLMProvider(
             ChatResponse(
                 content = response.toString(),
                 modelId = request.modelId,
-                usage = TokenUsage() // 本地推理暂时无法准确统计 token
+                usage = TokenUsage()
             )
         } catch (e: Exception) {
             ChatResponse(
@@ -149,27 +170,11 @@ class LocalLLMProvider(
     }
 
     /**
-     * 加载模型
-     */
-    fun loadModel(path: String): Boolean {
-        return try {
-            modelLoaded = engine.loadModel(path)
-            modelLoaded
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    /**
-     * 检查模型是否已加载
-     */
-    fun isModelLoaded(): Boolean = modelLoaded
-
-    /**
      * 释放资源
      */
     fun release() {
         engine.release()
         modelLoaded = false
+        currentModelId = null
     }
 }

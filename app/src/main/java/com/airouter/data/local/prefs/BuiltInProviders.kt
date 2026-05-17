@@ -85,21 +85,8 @@ object BuiltInProviders {
             type = ProviderType.LOCAL,
             defaultBaseUrl = "",
             isBuiltIn = true,
-            supportedModels = listOf(
-                AiModel("local-qwen2.5-3b", "Qwen2.5 3B (本地)", contextLength = 4096),
-            )
-        ),
-        Provider(
-            id = "ollama",
-            name = "Ollama (本地)",
-            type = ProviderType.OPENAI_COMPATIBLE,
-            defaultBaseUrl = "http://localhost:11434/v1",
-            isBuiltIn = true,
-            supportedModels = listOf(
-                AiModel("qwen3:32b", "Qwen3 32B", contextLength = 131072),
-                AiModel("deepseek-r1:32b", "DeepSeek R1 32B", contextLength = 131072),
-                AiModel("llama4:34b", "Llama 4 34B", contextLength = 131072),
-            )
+            // 模型列表由 LocalLLMProvider.listModels() 运行时动态返回已下载的 GGUF
+            supportedModels = emptyList(),
         ),
         Provider(
             id = "qwen",
