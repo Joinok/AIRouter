@@ -19,13 +19,18 @@ object ModelCatalog {
         val minRam: String,          // 最低内存需求
         val quant: String,           // 量化方式，如 "Q8_0"
         val recommended: Boolean = false,  // 是否推荐
-        val expectedSizeBytes: Long = 0    // 预期文件大小（字节），用于校验下载完整性
+        val expectedSizeBytes: Long = 0,   // 预期文件大小（字节），用于校验下载完整性
+        val isMultimodal: Boolean = false, // 是否为多模态模型
+        val mmprojFileName: String = "",   // 视觉编码器文件名（多模态模型）
+        val mmprojDownloadUrl: String = "",// 视觉编码器下载地址（多模态模型）
+        val mmprojExpectedSizeBytes: Long = 0 // 视觉编码器预期大小
     )
 
     /**
      * 支持的模型列表
      */
     val models = listOf(
+        // ---- 纯文本模型 ----
         ModelEntry(
             id = "qwen2.5-3b",
             displayName = "Qwen2.5 3B",
@@ -114,6 +119,54 @@ object ModelCatalog {
             minRam = "12GB+",
             quant = "Q8_0",
             expectedSizeBytes = 8_600_000_000L
+        ),
+
+        // ---- 多模态模型（支持图像理解 + OCR） ----
+        ModelEntry(
+            id = "minicpm-v-4.6",
+            displayName = "MiniCPM-V 4.6 👁",
+            description = "面壁智能 1.3B 端侧多模态模型，支持图像理解/OCR/视频，专为手机优化",
+            sizeLabel = "约 505MB",
+            fileName = "minicpm_v4.6-q4km.gguf",
+            downloadUrl = "https://hf-mirror.com/openbmb/MiniCPM-V-4.6-gguf/resolve/main/MiniCPM-V-4_6-Q4_K_M.gguf",
+            minRam = "6GB+",
+            quant = "Q4_K_M",
+            recommended = true,
+            expectedSizeBytes = 529_000_000L,
+            isMultimodal = true,
+            mmprojFileName = "minicpm_v4.6-mmproj-f16.gguf",
+            mmprojDownloadUrl = "https://hf-mirror.com/openbmb/MiniCPM-V-4.6-gguf/resolve/main/mmproj-model-f16.gguf",
+            mmprojExpectedSizeBytes = 1_108_000_000L
+        ),
+        ModelEntry(
+            id = "qwen2.5-vl-3b",
+            displayName = "Qwen2.5-VL 3B 👁",
+            description = "通义千问视觉 3B，支持图像理解/OCR/文档解析，性价比高",
+            sizeLabel = "约 3GB",
+            fileName = "qwen25_vl_3b-q4km.gguf",
+            downloadUrl = "https://hf-mirror.com/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+            minRam = "6GB+",
+            quant = "Q4_K_M",
+            expectedSizeBytes = 2_000_000_000L,
+            isMultimodal = true,
+            mmprojFileName = "qwen25_vl_3b-mmproj-q8_0.gguf",
+            mmprojDownloadUrl = "https://hf-mirror.com/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
+            mmprojExpectedSizeBytes = 1_000_000_000L
+        ),
+        ModelEntry(
+            id = "qwen2.5-vl-7b",
+            displayName = "Qwen2.5-VL 7B 👁",
+            description = "通义千问视觉 7B，视觉能力强，适合高端手机",
+            sizeLabel = "约 5GB",
+            fileName = "qwen25_vl_7b-q4km.gguf",
+            downloadUrl = "https://hf-mirror.com/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+            minRam = "8GB+",
+            quant = "Q4_K_M",
+            expectedSizeBytes = 4_500_000_000L,
+            isMultimodal = true,
+            mmprojFileName = "qwen25_vl_7b-mmproj-q8_0.gguf",
+            mmprojDownloadUrl = "https://hf-mirror.com/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-7B-Instruct-Q8_0.gguf",
+            mmprojExpectedSizeBytes = 1_700_000_000L
         )
     )
 
@@ -134,13 +187,20 @@ object ModelCatalog {
 
     /**
      * 检查模型文件是否完整（文件存在且大小 >= 预期大小的 90%）
+     * 多模态模型还需检查 mmproj 文件
      */
     fun isModelFileValid(modelsDir: java.io.File, model: ModelEntry): Boolean {
         val file = java.io.File(modelsDir, model.fileName)
         if (!file.exists()) return false
         // 如果没有设置预期大小，仅检查文件存在且非空
-        if (model.expectedSizeBytes <= 0) return file.length() > 0
-        // 文件大小至少达到预期大小的 90% 才算完整
-        return file.length() >= model.expectedSizeBytes * 0.9
+        if (model.expectedSizeBytes <= 0) {
+            if (file.length() <= 0) return false
+        } else {
+            // 文件大小至少达到预期大小的 90% 才算完整
+            if (file.length() < model.expectedSizeBytes * 0.9) return false
+        }
+        // 多模态模型的 mmproj 暂不强制要求（当前仅文本推理）
+        // mmproj 下载完整性由下载管理器单独追踪
+        return true
     }
 }

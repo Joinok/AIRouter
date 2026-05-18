@@ -1,7 +1,6 @@
 package com.airouter.ui.screen.local
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +15,7 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Recommend
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -130,9 +130,10 @@ fun LocalModelScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "1. 点击[下载]下载 GGUF 模型文件\n" +
-                                    "2. 下载完成后在新建会话时选择对应模型\n" +
-                                    "3. 已下载的模型会显示 ✓ 标识",
+                            text = "1. 点击[下载]下载模型文件\n" +
+                                    "2. 带👁的多模态模型支持图片理解\n" +
+                                    "3. 下载完成后在新建会话时选择对应模型\n" +
+                                    "4. 已下载的模型会显示 ✓ 标识",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -163,6 +164,16 @@ private fun ModelCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 多模态图标
+                        if (model.isMultimodal) {
+                            Icon(
+                                Icons.Default.Visibility,
+                                contentDescription = "多模态",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
                         Text(
                             text = model.displayName,
                             style = MaterialTheme.typography.titleMedium,
@@ -185,7 +196,6 @@ private fun ModelCard(
                     )
                 }
 
-                // 状态图标
                 when (state.status) {
                     DownloadStatus.COMPLETED -> {
                         Icon(
@@ -201,7 +211,6 @@ private fun ModelCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 描述
             Text(
                 text = model.description,
                 style = MaterialTheme.typography.bodySmall,
@@ -212,7 +221,6 @@ private fun ModelCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 操作区
             when (state.status) {
                 DownloadStatus.IDLE -> {
                     OutlinedButton(
@@ -228,7 +236,6 @@ private fun ModelCard(
                     val isPaused = state.status == DownloadStatus.PAUSED
                     val progressFraction = (state.progress / 100.0).toFloat().coerceIn(0f, 1f)
 
-                    // 进度条按钮样式
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -236,7 +243,6 @@ private fun ModelCard(
                             .clip(RoundedCornerShape(22.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
-                        // 进度背景
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(progressFraction)
@@ -250,7 +256,6 @@ private fun ModelCard(
                                 )
                         )
 
-                        // 进度文字
                         Text(
                             text = if (isPaused) "已暂停" else "%.1f%%".format(state.progress),
                             modifier = Modifier
@@ -263,7 +268,6 @@ private fun ModelCard(
                                 MaterialTheme.colorScheme.onPrimaryContainer,
                         )
 
-                        // 暂停/继续按钮
                         IconButton(
                             onClick = if (isPaused) onResume else onPause,
                             modifier = Modifier
@@ -279,7 +283,6 @@ private fun ModelCard(
                             )
                         }
 
-                        // 取消按钮（仅下载中显示）
                         if (!isPaused) {
                             IconButton(
                                 onClick = onDelete,

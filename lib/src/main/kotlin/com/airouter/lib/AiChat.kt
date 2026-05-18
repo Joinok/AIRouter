@@ -11,25 +11,18 @@ object AiChat {
     
     private var inferenceEngine: InferenceEngine? = null
     
-    /**
-     * 获取推理引擎实例（单例）
-     */
     fun getInferenceEngine(context: Context): InferenceEngine {
         return inferenceEngine ?: createInferenceEngine(context).also {
             inferenceEngine = it
         }
     }
     
-    /**
-     * 创建推理引擎实例
-     */
     private fun createInferenceEngine(context: Context): InferenceEngine {
         return object : InferenceEngine {
             private var modelLoaded = false
             private var modelPath: String? = null
             
             init {
-                // 调用 native 初始化
                 nativeInit()
             }
             
@@ -37,6 +30,17 @@ object AiChat {
                 return try {
                     modelPath = path
                     val result = nativeLoadModel(path)
+                    modelLoaded = result
+                    result
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            
+            override fun loadMultimodalModel(modelPath: String, mmprojPath: String): Boolean {
+                return try {
+                    this.modelPath = modelPath
+                    val result = nativeLoadMultimodalModel(modelPath, mmprojPath)
                     modelLoaded = result
                     result
                 } catch (e: Exception) {
@@ -54,25 +58,35 @@ object AiChat {
                     return@flow
                 }
                 
-                // 调用 native 推理（简化版本：模拟流式输出）
                 val response = nativeChat(text)
+                emit(response)
+            }
+            
+            override fun sendUserPromptWithImage(text: String, imagePath: String): Flow<String> = flow {
+                if (!modelLoaded) {
+                    emit("[ERROR] 模型未加载，请先加载模型")
+                    return@flow
+                }
+                
+                val response = nativeChatWithImage(text, imagePath)
                 emit(response)
             }
             
             override fun release() {
                 nativeFree()
                 modelLoaded = false
-                modelPath = null
+                this.modelPath = null
                 inferenceEngine = null
             }
         }
     }
     
-    // JNI 方法声明
     private external fun nativeInit(): Boolean
     private external fun nativeLoadModel(modelPath: String): Boolean
+    private external fun nativeLoadMultimodalModel(modelPath: String, mmprojPath: String): Boolean
     private external fun nativeFree()
     private external fun nativeChat(input: String): String
+    private external fun nativeChatWithImage(text: String, imagePath: String): String
     private external fun nativeReset()
     
     init {
