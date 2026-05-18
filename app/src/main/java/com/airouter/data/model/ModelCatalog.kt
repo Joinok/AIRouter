@@ -18,7 +18,8 @@ object ModelCatalog {
         val downloadUrl: String,     // GGUF 下载地址（魔搭社区镜像）
         val minRam: String,          // 最低内存需求
         val quant: String,           // 量化方式，如 "Q8_0"
-        val recommended: Boolean = false  // 是否推荐
+        val recommended: Boolean = false,  // 是否推荐
+        val expectedSizeBytes: Long = 0    // 预期文件大小（字节），用于校验下载完整性
     )
 
     /**
@@ -34,7 +35,8 @@ object ModelCatalog {
             downloadUrl = "https://www.modelscope.cn/models/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/master/qwen2.5-3b-instruct-q8_0.gguf",
             minRam = "6GB+",
             quant = "Q8_0",
-            recommended = true
+            recommended = true,
+            expectedSizeBytes = 3_100_000_000L
         ),
         ModelEntry(
             id = "qwen2.5-1.5b",
@@ -44,7 +46,8 @@ object ModelCatalog {
             fileName = "qwen25_1.5b.gguf",
             downloadUrl = "https://www.modelscope.cn/models/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/master/qwen2.5-1.5b-instruct-q8_0.gguf",
             minRam = "4GB+",
-            quant = "Q8_0"
+            quant = "Q8_0",
+            expectedSizeBytes = 1_800_000_000L
         ),
         ModelEntry(
             id = "gemma-2-2b",
@@ -54,7 +57,8 @@ object ModelCatalog {
             fileName = "gemma2_2b.gguf",
             downloadUrl = "https://hf-mirror.com/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q8_0.gguf",
             minRam = "5GB+",
-            quant = "Q8_0"
+            quant = "Q8_0",
+            expectedSizeBytes = 2_600_000_000L
         ),
         ModelEntry(
             id = "phi-3-mini",
@@ -64,7 +68,8 @@ object ModelCatalog {
             fileName = "phi3_mini.gguf",
             downloadUrl = "https://hf-mirror.com/bartowski/Phi-3-mini-4k-instruct-GGUF/resolve/main/Phi-3-mini-4k-instruct-Q8_0.gguf",
             minRam = "6GB+",
-            quant = "Q8_0"
+            quant = "Q8_0",
+            expectedSizeBytes = 3_800_000_000L
         ),
         ModelEntry(
             id = "deepseek-r1-1.5b",
@@ -74,7 +79,8 @@ object ModelCatalog {
             fileName = "deepseek_r1_1.5b.gguf",
             downloadUrl = "https://hf-mirror.com/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf",
             minRam = "4GB+",
-            quant = "Q8_0"
+            quant = "Q8_0",
+            expectedSizeBytes = 1_800_000_000L
         ),
         ModelEntry(
             id = "yi-1.5-6b",
@@ -84,7 +90,8 @@ object ModelCatalog {
             fileName = "yi15_6b.gguf",
             downloadUrl = "https://hf-mirror.com/bartowski/Yi-1.5-6B-Chat-GGUF/resolve/main/Yi-1.5-6B-Chat-Q8_0.gguf",
             minRam = "8GB+",
-            quant = "Q8_0"
+            quant = "Q8_0",
+            expectedSizeBytes = 6_300_000_000L
         ),
         ModelEntry(
             id = "qwen2.5-7b",
@@ -94,7 +101,8 @@ object ModelCatalog {
             fileName = "qwen25_7b.gguf",
             downloadUrl = "https://www.modelscope.cn/models/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/master/qwen2.5-7b-instruct-q8_0.gguf",
             minRam = "10GB+",
-            quant = "Q8_0"
+            quant = "Q8_0",
+            expectedSizeBytes = 7_200_000_000L
         ),
         ModelEntry(
             id = "llama3.1-8b",
@@ -104,7 +112,8 @@ object ModelCatalog {
             fileName = "llama31_8b.gguf",
             downloadUrl = "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q8_0.gguf",
             minRam = "12GB+",
-            quant = "Q8_0"
+            quant = "Q8_0",
+            expectedSizeBytes = 8_600_000_000L
         )
     )
 
@@ -119,7 +128,19 @@ object ModelCatalog {
      */
     fun getDownloadedIds(modelsDir: java.io.File): List<String> {
         return models.filter { model ->
-            java.io.File(modelsDir, model.fileName).exists()
+            isModelFileValid(modelsDir, model)
         }.map { it.id }
+    }
+
+    /**
+     * 检查模型文件是否完整（文件存在且大小 >= 预期大小的 90%）
+     */
+    fun isModelFileValid(modelsDir: java.io.File, model: ModelEntry): Boolean {
+        val file = java.io.File(modelsDir, model.fileName)
+        if (!file.exists()) return false
+        // 如果没有设置预期大小，仅检查文件存在且非空
+        if (model.expectedSizeBytes <= 0) return file.length() > 0
+        // 文件大小至少达到预期大小的 90% 才算完整
+        return file.length() >= model.expectedSizeBytes * 0.9
     }
 }

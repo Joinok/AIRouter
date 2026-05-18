@@ -1,1 +1,0 @@
-C:\Users\Administrator\.qclaw\workspace\AIRouter\lib\src\main\cpp\CMakeLists.txt

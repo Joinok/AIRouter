@@ -41,7 +41,7 @@ class LocalLLMProvider(
     }
 
     /**
-     * 获取默认已下载模型的路径
+     * 获取默认已下载模型的路径（校验文件完整性）
      */
     private fun getDefaultDownloadedModel(): String? {
         val modelsDir = File(context.filesDir, "models")
@@ -50,9 +50,19 @@ class LocalLLMProvider(
     }
 
     /**
-     * 根据 modelId 加载对应模型
+     * 根据 modelId 加载对应模型（先校验文件完整性）
      */
     private fun loadModelById(modelId: String?): Boolean {
+        val modelsDir = File(context.filesDir, "models")
+        val entry = modelId?.let { ModelCatalog.findById(it) }
+
+        // 校验文件完整性
+        if (entry != null) {
+            if (!ModelCatalog.isModelFileValid(modelsDir, entry)) {
+                return false
+            }
+        }
+
         val path = modelId?.let { getModelPathById(it) } ?: getDefaultDownloadedModel()
             ?: return false
         return try {

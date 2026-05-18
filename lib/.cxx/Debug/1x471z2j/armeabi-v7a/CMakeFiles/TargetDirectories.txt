@@ -1,4 +1,0 @@
-C:/Users/Administrator/.qclaw/workspace/AIRouter/lib/.cxx/Debug/1x471z2j/armeabi-v7a/CMakeFiles/llama.dir
-C:/Users/Administrator/.qclaw/workspace/AIRouter/lib/.cxx/Debug/1x471z2j/armeabi-v7a/CMakeFiles/llama-jni.dir
-C:/Users/Administrator/.qclaw/workspace/AIRouter/lib/.cxx/Debug/1x471z2j/armeabi-v7a/CMakeFiles/edit_cache.dir
-C:/Users/Administrator/.qclaw/workspace/AIRouter/lib/.cxx/Debug/1x471z2j/armeabi-v7a/CMakeFiles/rebuild_cache.dir
