@@ -50,10 +50,11 @@ object ProviderFactory {
             }
         }
         
-        // 注册本地 LLM Provider
+        // 注册本地 LLM Provider（单例模式，避免每次创建新实例导致模型重复加载）
+        val context = com.airouter.AiRouterApp.INSTANCE
+        val localProvider = LocalLLMProvider(context, null)  // modelPath=null，懒加载
         registry[ProviderType.LOCAL] = ProviderFactoryFn { p, c ->
-            val context = com.airouter.AiRouterApp.INSTANCE
-            LocalLLMProvider(context, null)  // modelPath=null，懒加载
+            localProvider
         }
     }
 }

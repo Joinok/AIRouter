@@ -9,6 +9,7 @@
 #include "chat.h"
 #include "sampling.h"
 #include "mtmd.h"
+#include "mtmd-helper.h"
 
 #define TAG "AiChat"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -19,8 +20,8 @@
 constexpr int   N_THREADS_MIN        = 2;
 constexpr int   N_THREADS_MAX        = 4;
 constexpr int   N_THREADS_HEADROOM   = 2;
-constexpr int   DEFAULT_CONTEXT_SIZE = 2048;
-constexpr int   BATCH_SIZE           = 512;
+constexpr int   DEFAULT_CONTEXT_SIZE = 4096;
+constexpr int   BATCH_SIZE           = 2048;
 constexpr int   OVERFLOW_HEADROOM    = 4;
 constexpr float DEFAULT_TEMP         = 0.6f;
 
@@ -169,8 +170,10 @@ Java_com_airouter_lib_AiChat_nativeLoadMultimodalModel(JNIEnv *env, jobject /*th
     // Load mmproj for vision support
     mtmd_context_params mtmd_params = mtmd_context_params_default();
     mtmd_params.warmup = false;  // skip warmup on mobile for faster init
+    mtmd_params.n_threads = get_n_threads();
     
-    g_mtmd_ctx = mtmd_init_from_file(mmproj_path, mtmd_params);
+    // Note: mtmd_init_from_file requires the loaded LLM model pointer
+    g_mtmd_ctx = mtmd_init_from_file(mmproj_path, g_model, mtmd_params);
     
     env->ReleaseStringUTFChars(modelPath, model_path);
     env->ReleaseStringUTFChars(mmprojPath, mmproj_path);
@@ -327,9 +330,8 @@ Java_com_airouter_lib_AiChat_nativeChatWithImage(JNIEnv *env, jobject /*this*/, 
     }
 
     if (!g_mtmd_ctx) {
-        // Fall back to text-only mode if mmproj not loaded
-        LOGW("mmproj not loaded, falling back to text-only mode");
-        return Java_com_airouter_lib_AiChat_nativeChat(env, nullptr, input);
+        LOGE("mmproj not loaded, cannot process image");
+        return env->NewStringUTF("[ERROR] 视觉模型(mmproj)未加载\n请检查：\n1. 模型管理页面两个文件都下载了？\n2. 重启应用后再试");
     }
 
     // Reset KV cache on new conversation
@@ -385,63 +387,71 @@ Java_com_airouter_lib_AiChat_nativeChatWithImage(JNIEnv *env, jobject /*this*/, 
         }
     }
 
-    // Encode image using mtmd
-    // Note: This is a simplified implementation. Full implementation would need to:
-    // 1. Load image file into bitmap
-    // 2. Call mtmd_encode() to get image tokens
-    // 3. Add image tokens to the batch before text tokens
-    // For now, we proceed with text-only and log that image was received
-    LOGI("Image received for multimodal chat: %s", image_path.c_str());
+    // --- Encode image using mtmd ---
+    LOGI("Loading image: %s", image_path.c_str());
 
-    // Format user message with image placeholder
-    // MiniCPM-V expects a specific format, e.g., "<image>\n<text>"
-    common_chat_msg user_chat_msg;
-    user_chat_msg.role = "user";
-    user_chat_msg.content = user_msg;  // Image tokens would be prepended here
-
-    bool has_template = common_chat_templates_was_explicit(g_chat_templates.get());
-    std::string formatted_user;
-    if (has_template) {
-        try {
-            formatted_user = common_chat_format_single(
-                g_chat_templates.get(), g_chat_msgs, user_chat_msg, true, false);
-        } catch (...) {
-            LOGW("Chat template formatting failed for user msg, using raw content");
-            has_template = false;
-            formatted_user = user_msg;
-        }
-    } else {
-        formatted_user = user_msg;
-    }
-    g_chat_msgs.push_back(user_chat_msg);
-
-    auto user_tokens = common_tokenize(g_context, formatted_user, has_template, has_template);
-    if (user_tokens.empty()) {
-        return env->NewStringUTF("[ERROR] Tokenization failed");
+    mtmd_bitmap * bitmap = mtmd_helper_bitmap_init_from_file(g_mtmd_ctx, image_path.c_str());
+    if (!bitmap) {
+        LOGE("Failed to load image file: %s", image_path.c_str());
+        std::string err = "[ERROR] 无法加载图片文件，请确认图片格式是否支持（jpg/png/bmp）\n路径: " + image_path;
+        return env->NewStringUTF(err.c_str());
     }
 
-    for (int i = 0; i < (int)user_tokens.size(); i += BATCH_SIZE) {
-        int sz = std::min((int)user_tokens.size() - i, BATCH_SIZE);
-        common_batch_clear(g_batch);
-        for (int j = 0; j < sz; j++) {
-            int pos = g_current_pos + i + j;
-            bool want_logit = (i + j == (int)user_tokens.size() - 1);
-            common_batch_add(g_batch, user_tokens[i+j], pos, {0}, want_logit);
-        }
-        if (llama_decode(g_context, g_batch) != 0) {
-            LOGE("Failed to decode user input");
-            return env->NewStringUTF("[ERROR] Decode failed");
-        }
+    // Build prompt with media marker for mtmd_tokenize
+    const char * marker = mtmd_default_marker();
+    std::string prompt_with_marker = std::string(marker) + "\n" + user_msg;
+
+    // Tokenize image + text together
+    mtmd_input_chunks * chunks = mtmd_input_chunks_init();
+    mtmd_input_text text_input;
+    text_input.text = prompt_with_marker.c_str();
+    text_input.add_special = true;
+    text_input.parse_special = true;
+
+    const mtmd_bitmap * bitmaps[] = { bitmap };
+    int32_t ret = mtmd_tokenize(g_mtmd_ctx, chunks, &text_input, bitmaps, 1);
+    if (ret != 0) {
+        LOGE("mtmd_tokenize failed with code %d", ret);
+        mtmd_input_chunks_free(chunks);
+        mtmd_bitmap_free(bitmap);
+        std::string err = "[ERROR] 图片编码失败 (mtmd_tokenize error code: " + std::to_string(ret) + ")";
+        return env->NewStringUTF(err.c_str());
     }
-    g_current_pos += (int)user_tokens.size();
+
+    mtmd_bitmap_free(bitmap);
+    LOGI("mtmd_tokenize success, %zu chunks, %zu total tokens",
+         mtmd_input_chunks_size(chunks),
+         mtmd_helper_get_n_tokens(chunks));
+
+    // Eval all chunks (handles image encoding + text decoding automatically)
+    LOGI("========== Starting mtmd_helper_eval_chunks ==========");
+    llama_pos new_n_past = g_current_pos;
+    LOGI("mtmd_helper_eval_chunks: g_current_pos=%d, BATCH_SIZE=%d", (int)g_current_pos, BATCH_SIZE);
+    
+    ret = mtmd_helper_eval_chunks(g_mtmd_ctx, g_context, chunks,
+                                   g_current_pos, 0, BATCH_SIZE, true, &new_n_past);
+    mtmd_input_chunks_free(chunks);
+
+    if (ret != 0) {
+        LOGE("mtmd_helper_eval_chunks FAILED with code %d", ret);
+        return env->NewStringUTF("[ERROR] Failed to process image");
+    }
+
+    LOGI("mtmd_helper_eval_chunks SUCCESS, new_n_past=%d", (int)new_n_past);
+    g_current_pos = new_n_past;
+    g_chat_msgs.push_back({"user", user_msg});
+    LOGI("Image + text processed, g_current_pos=%d", (int)g_current_pos);
+    LOGI("========== Starting inference loop ==========");
 
     // Generate response (same as nativeChat)
     std::string response;
     int max_tokens = 512;
+    LOGI("Inference loop: max_tokens=%d, g_current_pos=%d", max_tokens, (int)g_current_pos);
 
     for (int i = 0; i < max_tokens; i++) {
         if (g_current_pos >= DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM) {
             int discard = (g_current_pos - g_system_pos) / 2;
+            LOGW("Context overflow, shifting: discard=%d, old_pos=%d", discard, (int)g_current_pos);
             llama_memory_seq_rm(llama_get_memory(g_context), 0, g_system_pos, g_system_pos + discard);
             llama_memory_seq_add(llama_get_memory(g_context), 0, g_system_pos + discard, g_current_pos, -discard);
             g_current_pos -= discard;
@@ -449,22 +459,39 @@ Java_com_airouter_lib_AiChat_nativeChatWithImage(JNIEnv *env, jobject /*this*/, 
         }
 
         llama_token new_token = common_sampler_sample(g_sampler, g_context, -1);
+        
+        // Log first 5 tokens for debugging
+        if (i < 5) {
+            LOGI("Inference loop: i=%d, new_token=%d", i, (int)new_token);
+        }
+        
         common_sampler_accept(g_sampler, new_token, true);
 
         common_batch_clear(g_batch);
         common_batch_add(g_batch, new_token, g_current_pos, {0}, true);
         if (llama_decode(g_context, g_batch) != 0) {
-            LOGE("Failed to decode generated token");
+            LOGE("Failed to decode generated token at i=%d", i);
             break;
         }
         g_current_pos++;
 
         if (llama_vocab_is_eog(llama_model_get_vocab(g_model), new_token)) {
+            LOGI("Inference loop: EOS token detected at i=%d", i);
             break;
         }
 
         std::string piece = common_token_to_piece(g_context, new_token);
         response += piece;
+        
+        // Log response growth every 50 tokens
+        if (i % 50 == 0) {
+            LOGI("Inference loop: i=%d, response length=%zu", i, response.size());
+        }
+    }
+    
+    LOGI("Inference loop finished: response length=%zu", response.size());
+    if (response.empty()) {
+        LOGW("Inference loop: response is EMPTY!");
     }
 
     common_chat_msg assistant_msg;

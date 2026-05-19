@@ -6,63 +6,28 @@ set(CMAKE_C_STANDARD_REQUIRED true)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 
-# Download llama.cpp using FetchContent (instead of local submodule)
+# Download llama.cpp using FetchContent
 include(FetchContent)
 FetchContent_Declare(
     llamacpp
-    URL https://ghfast.top/https://github.com/ggml-org/llama.cpp/archive/refs/heads/master.zip
+    URL https://ghfast.top/https://github.com/ggml-org/llama.cpp/archive/b7340443d4cf6f89e8616de87ec6b3557055e581.zip
 )
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
 set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(llamacpp)
 
-# Build mtmd (multimodal support) from llama.cpp source
-set(MTMD_SOURCES
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/mtmd.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/mtmd-audio.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/mtmd-image.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/mtmd-helper.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/clip.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/cogvlm.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/conformer.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/dotsocr.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/gemma4a.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/gemma4v.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/glm4v.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/granite-speech.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/hunyuanocr.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/internvl.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/kimivl.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/kimik25.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/nemotron-v2-vl.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/llama4.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/llava.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/minicpmv.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/paddleocr.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/pixtral.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/qwen2vl.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/qwen3vl.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/mimovl.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/qwen3a.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/step3vl.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/siglip.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/whisper-enc.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/deepseekocr.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/mobilenetv5.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/youtuvl.cpp
-    ${llamacpp_SOURCE_DIR}/tools/mtmd/models/yasa2.cpp
-)
-add_library(mtmd STATIC ${MTMD_SOURCES})
-target_include_directories(mtmd PUBLIC
-    ${llamacpp_SOURCE_DIR}/tools/mtmd
-    ${llamacpp_SOURCE_DIR}/vendor
-)
-target_link_libraries(mtmd PUBLIC ggml llama)
-target_compile_features(mtmd PRIVATE cxx_std_17)
+# Set version for mtmd CMakeLists.txt
+if (NOT DEFINED LLAMA_INSTALL_VERSION)
+    set(LLAMA_INSTALL_VERSION "0.0.0")
+endif()
+
+# Build only mtmd (multimodal support) - skip all other tools
+add_subdirectory(${llamacpp_SOURCE_DIR}/tools/mtmd ${CMAKE_CURRENT_BINARY_DIR}/mtmd-build)
 
 # JNI bridge library
 add_library(llama-jni SHARED

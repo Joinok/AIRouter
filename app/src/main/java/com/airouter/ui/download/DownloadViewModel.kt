@@ -64,7 +64,16 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         notificationManager.createNotificationChannel(channel)
     }
 
-    private fun updateNotification(modelId: String, model: com.airouter.data.model.ModelCatalog.ModelEntry?, progress: Int, status: DownloadStatus) {
+    private fun updateNotification(
+        modelId: String,
+        model: com.airouter.data.model.ModelCatalog.ModelEntry?,
+        progress: Int,
+        status: DownloadStatus,
+        fileLabel: String = "",
+        modelDisplayName: String = "",
+        fileIndex: Int = 0,
+        totalFiles: Int = 1
+    ) {
         val builder = NotificationCompat.Builder(app, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(model?.displayName ?: "模型下载")
@@ -74,7 +83,16 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         when (status) {
             DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED -> {
                 builder.setProgress(100, progress, false)
-                    .setContentText(if (status == DownloadStatus.PAUSED) "已暂停 $progress%" else "下载中 $progress%")
+                val text = when {
+                    status == DownloadStatus.PAUSED -> "已暂停 $progress%"
+                    modelDisplayName.isNotEmpty() && totalFiles > 1 ->
+                        "正在下载 $modelDisplayName（${fileIndex + 1}/$totalFiles）：$fileLabel... $progress%"
+                    modelDisplayName.isNotEmpty() ->
+                        "正在下载 $modelDisplayName... $progress%"
+                    fileLabel.isNotEmpty() -> "正在下载 $fileLabel... $progress%"
+                    else -> "下载中 $progress%"
+                }
+                builder.setContentText(text)
                     .setOngoing(status == DownloadStatus.DOWNLOADING)
             }
             DownloadStatus.COMPLETED -> {
@@ -182,7 +200,11 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         modelId: String,
         modelEntry: com.airouter.data.model.ModelCatalog.ModelEntry,
         progressOffset: Double,  // 进度偏移（多模态模型：LLM 0-50%, mmproj 50-100%）
-        progressWeight: Double   // 进度权重（1.0 = 独占, 0.5 = 占一半）
+        progressWeight: Double,   // 进度权重（1.0 = 独占, 0.5 = 占一半）
+        fileLabel: String = "",   // 文件标签（"主模型"/"视觉编码器"）
+        modelDisplayName: String = "",
+        fileIndex: Int = 0,
+        totalFiles: Int = 1
     ): Long {
         val modelFile = File(modelsDir, fileName)
         val existingLength = if (modelFile.exists()) modelFile.length() else 0L
@@ -229,7 +251,7 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                                 updateStateProgress(modelId, overallProgress.coerceIn(0.0, 99.9))
                                 val now = System.currentTimeMillis()
                                 if (now - lastNotifyTime > 2000) {
-                                    updateNotification(modelId, modelEntry, overallProgress.toInt(), DownloadStatus.DOWNLOADING)
+                                    updateNotification(modelId, modelEntry, overallProgress.toInt(), DownloadStatus.DOWNLOADING, fileLabel, modelDisplayName, fileIndex, totalFiles)
                                     lastNotifyTime = now
                                 }
                             }
@@ -254,7 +276,7 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                                 updateStateProgress(modelId, overallProgress.coerceIn(0.0, 99.9))
                                 val now = System.currentTimeMillis()
                                 if (now - lastNotifyTime > 2000) {
-                                    updateNotification(modelId, modelEntry, overallProgress.toInt(), DownloadStatus.DOWNLOADING)
+                                    updateNotification(modelId, modelEntry, overallProgress.toInt(), DownloadStatus.DOWNLOADING, fileLabel, modelDisplayName, fileIndex, totalFiles)
                                     lastNotifyTime = now
                                 }
                             }
@@ -298,7 +320,7 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                                 updateStateProgress(modelId, overallProgress.coerceIn(0.0, 99.9))
                                 val now = System.currentTimeMillis()
                                 if (now - lastNotifyTime > 2000) {
-                                    updateNotification(modelId, modelEntry, overallProgress.toInt(), DownloadStatus.DOWNLOADING)
+                                    updateNotification(modelId, modelEntry, overallProgress.toInt(), DownloadStatus.DOWNLOADING, fileLabel, modelDisplayName, fileIndex, totalFiles)
                                     lastNotifyTime = now
                                 }
                             }
@@ -332,7 +354,11 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                     modelId = modelEntry.id,
                     modelEntry = modelEntry,
                     progressOffset = 0.0,
-                    progressWeight = 0.5
+                    progressWeight = 0.5,
+                    fileLabel = "主模型",
+                    modelDisplayName = modelEntry.displayName,
+                    fileIndex = 0,
+                    totalFiles = 2
                 )
                 downloadSingleFile(
                     fileName = modelEntry.mmprojFileName,
@@ -341,7 +367,11 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                     modelId = modelEntry.id,
                     modelEntry = modelEntry,
                     progressOffset = 50.0,
-                    progressWeight = 0.5
+                    progressWeight = 0.5,
+                    fileLabel = "视觉编码器",
+                    modelDisplayName = modelEntry.displayName,
+                    fileIndex = 1,
+                    totalFiles = 2
                 )
             } else {
                 // 纯文本模型：单文件下载（0-100%）
@@ -352,7 +382,10 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
                     modelId = modelEntry.id,
                     modelEntry = modelEntry,
                     progressOffset = 0.0,
-                    progressWeight = 1.0
+                    progressWeight = 1.0,
+                    modelDisplayName = modelEntry.displayName,
+                    fileIndex = 0,
+                    totalFiles = 1
                 )
             }
 
