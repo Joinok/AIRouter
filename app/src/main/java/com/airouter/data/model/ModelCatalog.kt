@@ -138,36 +138,7 @@ object ModelCatalog {
             mmprojDownloadUrl = "https://hf-mirror.com/openbmb/MiniCPM-V-4.6-gguf/resolve/main/mmproj-model-f16.gguf",
             mmprojExpectedSizeBytes = 1_108_000_000L
         ),
-        ModelEntry(
-            id = "qwen2.5-vl-3b",
-            displayName = "Qwen2.5-VL 3B 👁",
-            description = "通义千问视觉 3B，支持图像理解/OCR/文档解析，性价比高",
-            sizeLabel = "约 3GB",
-            fileName = "qwen25_vl_3b-q4km.gguf",
-            downloadUrl = "https://hf-mirror.com/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
-            minRam = "6GB+",
-            quant = "Q4_K_M",
-            expectedSizeBytes = 2_000_000_000L,
-            isMultimodal = true,
-            mmprojFileName = "qwen25_vl_3b-mmproj-q8_0.gguf",
-            mmprojDownloadUrl = "https://hf-mirror.com/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
-            mmprojExpectedSizeBytes = 1_000_000_000L
-        ),
-        ModelEntry(
-            id = "qwen2.5-vl-7b",
-            displayName = "Qwen2.5-VL 7B 👁",
-            description = "通义千问视觉 7B，视觉能力强，适合高端手机",
-            sizeLabel = "约 5GB",
-            fileName = "qwen25_vl_7b-q4km.gguf",
-            downloadUrl = "https://hf-mirror.com/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
-            minRam = "8GB+",
-            quant = "Q4_K_M",
-            expectedSizeBytes = 4_500_000_000L,
-            isMultimodal = true,
-            mmprojFileName = "qwen25_vl_7b-mmproj-q8_0.gguf",
-            mmprojDownloadUrl = "https://hf-mirror.com/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-7B-Instruct-Q8_0.gguf",
-            mmprojExpectedSizeBytes = 1_700_000_000L
-        )
+        // Qwen2.5-VL 已移除：图片编码太慢，移动端不适合
     )
 
     /**

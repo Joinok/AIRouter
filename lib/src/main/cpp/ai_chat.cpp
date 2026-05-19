@@ -210,23 +210,21 @@ Java_com_airouter_lib_AiChat_nativeChat(JNIEnv *env, jobject /*this*/, jstring i
         sys_msg.role = "system";
         sys_msg.content = sys_content;
 
-        bool has_template = common_chat_templates_was_explicit(g_chat_templates.get());
+        // Always try chat template formatting - models need role tags to generate properly
         std::string formatted;
-        if (has_template) {
-            try {
-                formatted = common_chat_format_single(
-                    g_chat_templates.get(), g_chat_msgs, sys_msg, false, false);
-            } catch (...) {
-                LOGW("Chat template formatting failed for system msg, using raw content");
-                has_template = false;
-                formatted = sys_content;
-            }
-        } else {
+        bool use_special = true;
+        try {
+            formatted = common_chat_format_single(
+                g_chat_templates.get(), g_chat_msgs, sys_msg, false, false);
+            LOGI("[SYS] System formatted (%zu chars): [%s]", formatted.size(), formatted.c_str());
+        } catch (...) {
+            LOGW("Chat template formatting failed for system msg, using raw content");
             formatted = sys_content;
+            use_special = false;
         }
         g_chat_msgs.push_back(sys_msg);
 
-        auto sys_tokens = common_tokenize(g_context, formatted, has_template, has_template);
+        auto sys_tokens = common_tokenize(g_context, formatted, use_special, use_special);
         if (!sys_tokens.empty()) {
             for (int i = 0; i < (int)sys_tokens.size(); i += BATCH_SIZE) {
                 int sz = std::min((int)sys_tokens.size() - i, BATCH_SIZE);
@@ -242,28 +240,26 @@ Java_com_airouter_lib_AiChat_nativeChat(JNIEnv *env, jobject /*this*/, jstring i
         }
     }
 
-    // Format user message
+    // Format user message - always use chat template for proper role tags
     common_chat_msg user_chat_msg;
     user_chat_msg.role = "user";
     user_chat_msg.content = user_msg;
 
-    bool has_template = common_chat_templates_was_explicit(g_chat_templates.get());
+    bool use_special_user = true;
     std::string formatted_user;
-    if (has_template) {
-        try {
-            formatted_user = common_chat_format_single(
-                g_chat_templates.get(), g_chat_msgs, user_chat_msg, true, false);
-        } catch (...) {
-            LOGW("Chat template formatting failed for user msg, using raw content");
-            has_template = false;
-            formatted_user = user_msg;
-        }
-    } else {
+    try {
+        formatted_user = common_chat_format_single(
+            g_chat_templates.get(), g_chat_msgs, user_chat_msg, true, false);
+        LOGI("[USER] User formatted (%zu chars): [%s]", formatted_user.size(), formatted_user.c_str());
+    } catch (...) {
+        LOGW("Chat template formatting failed for user msg, using raw content");
         formatted_user = user_msg;
+        use_special_user = false;
     }
     g_chat_msgs.push_back(user_chat_msg);
 
-    auto user_tokens = common_tokenize(g_context, formatted_user, has_template, has_template);
+    auto user_tokens = common_tokenize(g_context, formatted_user, use_special_user, use_special_user);
+    LOGI("[nativeChat] user_tokens=%zu, pos=%d", user_tokens.size(), (int)g_current_pos);
     if (user_tokens.empty()) {
         return env->NewStringUTF("[ERROR] Tokenization failed");
     }
@@ -286,6 +282,7 @@ Java_com_airouter_lib_AiChat_nativeChat(JNIEnv *env, jobject /*this*/, jstring i
     // Generate response
     std::string response;
     int max_tokens = 512;
+    LOGI("=== [nativeChat] INFERENCE START: pos=%d ===", (int)g_current_pos);
 
     for (int i = 0; i < max_tokens; i++) {
         if (g_current_pos >= DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM) {
@@ -297,23 +294,31 @@ Java_com_airouter_lib_AiChat_nativeChat(JNIEnv *env, jobject /*this*/, jstring i
         }
 
         llama_token new_token = common_sampler_sample(g_sampler, g_context, -1);
+
+        // CRITICAL DIAGNOSTICS
+        std::string token_str = common_token_to_piece(g_context, new_token);
+        bool is_eog = llama_vocab_is_eog(llama_model_get_vocab(g_model), new_token);
+        LOGI("[nativeChat] Tok[%d]: id=%d str=[%s] eog=%d", i, (int)new_token, token_str.c_str(), (int)is_eog);
+
         common_sampler_accept(g_sampler, new_token, true);
 
         common_batch_clear(g_batch);
         common_batch_add(g_batch, new_token, g_current_pos, {0}, true);
         if (llama_decode(g_context, g_batch) != 0) {
-            LOGE("Failed to decode generated token");
+            LOGE("Failed to decode generated token at i=%d", i);
             break;
         }
         g_current_pos++;
 
-        if (llama_vocab_is_eog(llama_model_get_vocab(g_model), new_token)) {
+        if (is_eog) {
+            LOGI("[nativeChat] EOS at tok[%d], stopping", i);
             break;
         }
 
-        std::string piece = common_token_to_piece(g_context, new_token);
-        response += piece;
+        response += token_str;
     }
+    
+    LOGI("=== [nativeChat] INFERENCE END: resp_len=%zu ===", response.size());
 
     common_chat_msg assistant_msg;
     assistant_msg.role = "assistant";
@@ -348,30 +353,28 @@ Java_com_airouter_lib_AiChat_nativeChatWithImage(JNIEnv *env, jobject /*this*/, 
 
     LOGI("Processing image: %s", image_path.c_str());
 
-    // Add system prompt on first message (same as nativeChat)
+    // Add system prompt on first message - always use chat template
     if (g_chat_msgs.empty()) {
         std::string sys_content = "You are a helpful assistant that can understand images.";
         common_chat_msg sys_msg;
         sys_msg.role = "system";
         sys_msg.content = sys_content;
 
-        bool has_template = common_chat_templates_was_explicit(g_chat_templates.get());
+        // Always try chat template formatting
         std::string formatted;
-        if (has_template) {
-            try {
-                formatted = common_chat_format_single(
-                    g_chat_templates.get(), g_chat_msgs, sys_msg, false, false);
-            } catch (...) {
-                LOGW("Chat template formatting failed for system msg, using raw content");
-                has_template = false;
-                formatted = sys_content;
-            }
-        } else {
+        bool use_special = true;
+        try {
+            formatted = common_chat_format_single(
+                g_chat_templates.get(), g_chat_msgs, sys_msg, false, false);
+            LOGI("[SYS] System formatted (%zu chars): [%s]", formatted.size(), formatted.c_str());
+        } catch (...) {
+            LOGW("Chat template formatting failed for system msg, using raw content");
             formatted = sys_content;
+            use_special = false;
         }
         g_chat_msgs.push_back(sys_msg);
 
-        auto sys_tokens = common_tokenize(g_context, formatted, has_template, has_template);
+        auto sys_tokens = common_tokenize(g_context, formatted, use_special, use_special);
         if (!sys_tokens.empty()) {
             for (int i = 0; i < (int)sys_tokens.size(); i += BATCH_SIZE) {
                 int sz = std::min((int)sys_tokens.size() - i, BATCH_SIZE);

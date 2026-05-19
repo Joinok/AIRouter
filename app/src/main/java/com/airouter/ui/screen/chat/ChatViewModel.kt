@@ -156,7 +156,7 @@ class ChatViewModel(
 
             try {
                 sendChatMessageUseCase.invoke(session, userMessage, assistantMessageId)
-                    .timeout(120.seconds)  // 2分钟超时，防止 flow 永远挂起
+                    .timeout(300.seconds)  // 5分钟超时，多模态模型图片编码耗时长
                     .collect { chunk ->
                         if (chunk.isReasoning) {
                             // 推理过程，先显示给用户

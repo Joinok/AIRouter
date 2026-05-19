@@ -33,8 +33,10 @@ object ProviderFactory {
      * 如未注册则默认使用 OpenAiCompatibleProvider
      */
     fun create(provider: Provider, client: OkHttpClient): AIProvider {
-        return registry[provider.type]?.invoke(provider, client)
-            ?: OpenAiCompatibleProvider(provider, client)
+        val fn = registry[provider.type]
+        val result = fn?.invoke(provider, client) ?: OpenAiCompatibleProvider(provider, client)
+        android.util.Log.d("AIRouter-PF", "create: type=${provider.type}, registryHit=${fn != null}, instance=${result.hashCode()}, isLocal=${result is com.airouter.data.remote.local.LocalLLMProvider}")
+        return result
     }
 
     /**
