@@ -56,18 +56,6 @@ AIRouter/
 
 ## 🚀 快速开始
 
-### 构建 Debug APK
-
-```bash
-# 需要 JDK 21+、Android SDK、NDK 27
-$env:JAVA_HOME="D:\Java\jdk-21.0.2"
-$env:ANDROID_HOME="F:\sdk"
-cd AIRouter
-.\gradlew.bat assembleDebug --no-daemon
-```
-
-构建完成后 APK 位于：`app\build\outputs\apk\debug\app-debug.apk`
-
 ### 下载模型
 
 1. 打开应用 → 底部「本地模型」
