@@ -194,6 +194,7 @@ private fun ProviderCard(
 fun AddProviderDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, baseUrl: String, apiKey: String, modelId: String, displayName: String) -> Unit,
+    viewModel: ProviderListViewModel = koinViewModel(),
 ) {
     var name by remember { mutableStateOf("") }
     var baseUrl by remember { mutableStateOf("") }
@@ -201,6 +202,10 @@ fun AddProviderDialog(
     var modelId by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
     var showApiKey by remember { mutableStateOf(false) }
+
+    // 模型拉取状态
+    val fetchState by viewModel.fetchState.collectAsState()
+    var showModelPicker by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -252,15 +257,41 @@ fun AddProviderDialog(
                     }
                 )
 
-                // 模型 ID
-                OutlinedTextField(
-                    value = modelId,
-                    onValueChange = { modelId = it },
-                    label = { Text("模型 ID") },
-                    placeholder = { Text("如：deepseek-chat") },
-                    singleLine = true,
+                // 模型 ID + 拉取按钮
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = modelId,
+                        onValueChange = { modelId = it },
+                        label = { Text("模型 ID") },
+                        placeholder = { Text("如：deepseek-chat") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            if (baseUrl.isNotBlank()) {
+                                viewModel.fetchModels(baseUrl, apiKey)
+                                showModelPicker = true
+                            }
+                        },
+                        enabled = baseUrl.isNotBlank() && fetchState !is ProviderListViewModel.FetchState.Loading,
+                    ) {
+                        if (fetchState is ProviderListViewModel.FetchState.Loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("拉取")
+                    }
+                }
 
                 // 显示名称
                 OutlinedTextField(
@@ -294,6 +325,176 @@ fun AddProviderDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("取消")
+            }
+        }
+    )
+
+    // 模型选择弹窗
+    if (showModelPicker) {
+        ModelPickerDialog(
+            fetchState = fetchState,
+            onDismiss = {
+                showModelPicker = false
+                viewModel.clearFetchState()
+            },
+            onModelSelected = { selectedId ->
+                modelId = selectedId
+                if (displayName.isBlank()) {
+                    displayName = selectedId
+                }
+                showModelPicker = false
+                viewModel.clearFetchState()
+            }
+        )
+    }
+}
+
+/**
+ * 模型选择弹窗 - 显示从 API 拉取的模型列表
+ */
+@Composable
+private fun ModelPickerDialog(
+    fetchState: ProviderListViewModel.FetchState,
+    onDismiss: () -> Unit,
+    onModelSelected: (String) -> Unit,
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var filterText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择模型") },
+        text = {
+            Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 400.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 搜索框
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it; filterText = it },
+                    label = { Text("搜索模型") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+                )
+
+                when (fetchState) {
+                    is ProviderListViewModel.FetchState.Idle,
+                    is ProviderListViewModel.FetchState.Loading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    is ProviderListViewModel.FetchState.Error -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(150.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Default.Error,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = (fetchState as ProviderListViewModel.FetchState.Error).message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                    }
+                    is ProviderListViewModel.FetchState.Success -> {
+                        val models = (fetchState as ProviderListViewModel.FetchState.Success).models
+                        val filteredModels = if (filterText.isBlank()) models
+                        else models.filter { it.id.contains(filterText, ignoreCase = true) }
+
+                        if (filteredModels.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(150.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "无匹配模型",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(filteredModels.size) { index ->
+                                    val model = filteredModels[index]
+                                    Card(
+                                        onClick = { onModelSelected(model.id) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        ),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = model.id,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    maxLines = 1,
+                                                )
+                                                if (model.ownedBy.isNotBlank()) {
+                                                    Text(
+                                                        text = model.ownedBy,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                            }
+                                            Icon(
+                                                Icons.Default.ChevronRight,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 底部统计
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "共 ${filteredModels.size} / ${models.size} 个模型",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.align(Alignment.End),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
             }
         }
     )
