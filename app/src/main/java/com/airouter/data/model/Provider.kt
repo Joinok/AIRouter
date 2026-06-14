@@ -6,6 +6,7 @@ data class Provider(
     val type: ProviderType,
     val defaultBaseUrl: String,
     val isBuiltIn: Boolean,
+    val isCustom: Boolean = false,  // 标记用户自建的 Provider
     val enabled: Boolean = true,
     val apiKey: String = "",
     val customBaseUrl: String = "",

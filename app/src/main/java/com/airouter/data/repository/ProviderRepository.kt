@@ -5,6 +5,7 @@ import com.airouter.data.local.db.entity.ProviderConfigEntity
 import com.airouter.data.local.prefs.BuiltInProviders
 import com.airouter.data.model.AiModel
 import com.airouter.data.model.Provider
+import com.airouter.data.model.ProviderType
 import com.airouter.domain.provider.ProviderFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -22,16 +23,52 @@ class ProviderRepository(
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     /**
-     * 获取所有 Provider（内置 + 用户配置合并）。
+     * 获取所有 Provider（内置 + 用户配置 + 自定义）
      * Flow 会自动响应数据库变化。
      */
     fun getAllProviders(): Flow<List<Provider>> {
         return providerConfigDao.getAllConfigs().map { configs ->
             val configMap = configs.associateBy { it.providerId }
-            BuiltInProviders.all.map { builtIn ->
+            
+            // 内置 Provider 列表
+            val builtInProviders = BuiltInProviders.all.map { builtIn ->
                 val config = configMap[builtIn.id]
                 mergeProvider(builtIn, config)
             }
+            
+            // 自定义 Provider（数据库中有但不在内置列表中的）
+            val builtInIds = BuiltInProviders.all.map { it.id }.toSet()
+            val customProviders = configs
+                .filter { it.providerId !in builtInIds && it.providerType != null }
+                .map { config ->
+                    val providerType = try {
+                        ProviderType.valueOf(config.providerType!!)
+                    } catch (e: Exception) {
+                        ProviderType.OPENAI_COMPATIBLE
+                    }
+                    val models = config.builtInModelsJson?.let {
+                        try {
+                            json.decodeFromString<List<AiModel>>(it)
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                    } ?: emptyList()
+                    
+                    Provider(
+                        id = config.providerId,
+                        name = config.name ?: config.providerId,
+                        type = providerType,
+                        defaultBaseUrl = config.defaultBaseUrl ?: "",
+                        isBuiltIn = false,
+                        isCustom = true,
+                        apiKey = config.apiKey,
+                        customBaseUrl = config.customBaseUrl,
+                        enabled = config.enabled,
+                        supportedModels = models,
+                    )
+                }
+            
+            builtInProviders + customProviders
         }
     }
 
@@ -56,6 +93,48 @@ class ProviderRepository(
 
     suspend fun getProviderConfig(providerId: String): ProviderConfigEntity? {
         return providerConfigDao.getConfig(providerId)
+    }
+
+    /**
+     * 添加自定义 Provider
+     */
+    suspend fun addCustomProvider(provider: Provider) {
+        val modelsJson = if (provider.supportedModels.isNotEmpty()) {
+            try {
+                json.encodeToString(
+                    kotlinx.serialization.builtins.ListSerializer(AiModel.serializer()),
+                    provider.supportedModels
+                )
+            } catch (e: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+        
+        providerConfigDao.insertConfig(
+            ProviderConfigEntity(
+                providerId = provider.id,
+                apiKey = provider.apiKey,
+                customBaseUrl = provider.customBaseUrl,
+                enabled = provider.enabled,
+                fetchedModelsJson = null,
+                name = provider.name,
+                providerType = provider.type.name,
+                defaultBaseUrl = provider.defaultBaseUrl,
+                builtInModelsJson = modelsJson,
+            )
+        )
+    }
+
+    /**
+     * 删除自定义 Provider
+     */
+    suspend fun deleteCustomProvider(providerId: String) {
+        val config = providerConfigDao.getConfig(providerId)
+        if (config != null) {
+            providerConfigDao.deleteConfig(config)
+        }
     }
 
     suspend fun getProviderById(providerId: String): Provider? {
@@ -154,6 +233,7 @@ class ProviderRepository(
     /**
      * 合并内置 Provider 与数据库配置。
      * 模型列表：优先用 fetchedModels，否则用内置 supportedModels。
+     * 自定义 Provider 直接从数据库读取完整配置。
      */
     private fun mergeProvider(builtIn: Provider, config: ProviderConfigEntity?): Provider {
         val fetchedModels = config?.fetchedModelsJson?.let {
