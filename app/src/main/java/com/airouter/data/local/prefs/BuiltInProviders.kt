@@ -6,7 +6,8 @@ import com.airouter.data.model.ProviderType
 
 /**
  * 内置 Provider 列表。
- * 预设只保留 Claude、Gemini、OpenAI 三个，其他通过右上角「+」添加自定义 OpenAI 兼容端点。
+ * 包含云端 API（Claude/Gemini/OpenAI）和本地模型。
+ * 其他自定义端点通过右上角「+」添加。
  */
 object BuiltInProviders {
 
@@ -58,6 +59,15 @@ object BuiltInProviders {
                 AiModel("o4-mini", "o4-mini", contextLength = 200000,
                     inputPricePerMToken = 1.10f, outputPricePerMToken = 4.40f, supportsVision = true),
             )
+        ),
+        // 本地模型 - 设备端推理（llama.cpp + GGUF）
+        Provider(
+            id = "local",
+            name = "本地模型",
+            type = ProviderType.LOCAL,
+            defaultBaseUrl = "",
+            isBuiltIn = true,
+            supportedModels = emptyList(), // 本地模型从 ModelCatalog 动态获取
         ),
     )
 }
