@@ -135,7 +135,8 @@ class ProviderListViewModel(
                     _fetchState.value = FetchState.Success(models)
                 }
             } catch (e: Exception) {
-                _fetchState.value = FetchState.Error("请求失败: ${e.message}")
+                val errorMsg = e.message ?: e.javaClass.simpleName
+                _fetchState.value = FetchState.Error("请求失败: $errorMsg")
             }
         }
     }
