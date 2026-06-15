@@ -3,6 +3,7 @@ package com.airouter.ui.screen.provider
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -20,7 +21,7 @@ import com.airouter.data.model.Provider
 import com.airouter.data.model.ProviderType
 import org.koin.androidx.compose.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProviderListScreen(
     onNavigateToEdit: (String) -> Unit,
@@ -192,7 +193,7 @@ private fun ProviderCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddProviderDialog(
     onDismiss: () -> Unit,
@@ -208,8 +209,6 @@ fun AddProviderDialog(
 
     // 额外参数
     var extraParams by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var showExtraParams by remember { mutableStateOf(false) }
-    var showAddParamDialog by remember { mutableStateOf(false) }
 
     // 模型拉取状态
     val fetchState by viewModel.fetchState.collectAsState()
@@ -314,88 +313,126 @@ fun AddProviderDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                // === 自定义可选参数 ===
+                // === 可选参数区域（截图样式：快捷按钮 + 自定义输入框） ===
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
+                // 标题
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showExtraParams = !showExtraParams }
-                        .padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "自定义请求参数",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (extraParams.isNotEmpty()) {
-                        Text(
-                            text = "${extraParams.size} 项",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
                     Icon(
-                        imageVector = if (showExtraParams) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (showExtraParams) "收起" else "展开",
-                        modifier = Modifier.size(20.dp),
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "可选参数",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
 
-                AnimatedVisibility(visible = showExtraParams) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "这些参数会作为额外字段附加到 API 请求体中",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                Text(
+                    text = "不添加则使用服务商默认值。需要时可添加 temperature、top_p、max_tokens 等参数；小数请直接输入，例如 0.95。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
-                        extraParams.forEach { (key, value) ->
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = key,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                        Text(
-                                            text = value,
-                                            style = MaterialTheme.typography.bodySmall,
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            extraParams = extraParams - key
-                                        },
-                                        modifier = Modifier.size(28.dp),
-                                    ) {
-                                        Icon(Icons.Default.Close, contentDescription = "删除", modifier = Modifier.size(16.dp))
-                                    }
+                // 快捷参数按钮（横向排列）
+                val quickParams = listOf("temperature", "top_p", "max_tokens", "presence_penalty", "frequency_penalty")
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    quickParams.forEach { param ->
+                        OutlinedButton(
+                            onClick = {
+                                extraParams = if (param in extraParams) {
+                                    extraParams - param
+                                } else {
+                                    extraParams + (param to "")
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text("+ $param")
+                        }
+                    }
+                }
+
+                // 已选参数列表（每个参数一行，参数名+值输入框）
+                extraParams.keys.toList().forEach { key ->
+                    var currentValue by remember(key) { mutableStateOf(extraParams[key] ?: "") }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = key,
+                            onValueChange = {},
+                            label = null,
+                            readOnly = true,
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = MaterialTheme.colorScheme.primary,
+                                unfocusedTextColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = currentValue,
+                            onValueChange = { newValue ->
+                                currentValue = newValue
+                                extraParams = if (newValue.isBlank()) {
+                                    extraParams - key
+                                } else {
+                                    extraParams + (key to newValue)
+                                }
+                            },
+                            label = { Text("值") },
+                            placeholder = { Text("如 0.95") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
+                // 自定义参数输入行
+                var customKey by remember { mutableStateOf("") }
+                var customValue by remember { mutableStateOf("") }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = customKey,
+                        onValueChange = { customKey = it },
+                        label = { Text("自定义参数") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedTextField(
+                        value = customValue,
+                        onValueChange = { customValue = it },
+                        label = { Text("值") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        trailingIcon = {
+                            if (customKey.isNotBlank() && customValue.isNotBlank()) {
+                                IconButton(onClick = {
+                                    extraParams = extraParams + (customKey.trim() to customValue.trim())
+                                    customKey = ""
+                                    customValue = ""
+                                }) {
+                                    Icon(Icons.Default.Add, contentDescription = "添加")
                                 }
                             }
                         }
-
-                        OutlinedButton(
-                            onClick = { showAddParamDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("添加参数")
-                        }
-                    }
+                    )
                 }
             }
         },
@@ -443,90 +480,6 @@ fun AddProviderDialog(
             }
         )
     }
-
-    // 添加参数对话框
-    if (showAddParamDialog) {
-        AddParamMiniDialog(
-            existingKeys = extraParams.keys,
-            onDismiss = { showAddParamDialog = false },
-            onConfirm = { key, value ->
-                extraParams = extraParams + (key to value)
-                showAddParamDialog = false
-            }
-        )
-    }
-}
-
-/**
- * 简易的添加参数对话框（用于添加 Provider 时使用）
- */
-@Composable
-private fun AddParamMiniDialog(
-    existingKeys: Set<String>,
-    onDismiss: () -> Unit,
-    onConfirm: (key: String, value: String) -> Unit,
-) {
-    var key by remember { mutableStateOf("") }
-    var value by remember { mutableStateOf("") }
-
-    val presets = listOf("frequency_penalty", "presence_penalty", "seed", "top_k")
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("请求参数") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it },
-                    label = { Text("参数名") },
-                    placeholder = { Text("如：frequency_penalty") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = key in existingKeys,
-                    supportingText = { if (key in existingKeys) Text("该参数已存在") }
-                )
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    label = { Text("参数值") },
-                    placeholder = { Text("如：0.5") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                val availablePresets = presets.filter { it !in existingKeys }
-                if (availablePresets.isNotEmpty()) {
-                    Text("快捷填入：", style = MaterialTheme.typography.labelSmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        availablePresets.take(4).forEach { preset ->
-                            AssistChip(
-                                onClick = { key = preset },
-                                label = { Text(preset, style = MaterialTheme.typography.labelSmall) },
-                            )
-                        }
-                    }
-                }
-
-                when (key) {
-                    "frequency_penalty" -> Text("频率惩罚 (-2~2)，默认 0", style = MaterialTheme.typography.labelSmall)
-                    "presence_penalty" -> Text("存在惩罚 (-2~2)，默认 0", style = MaterialTheme.typography.labelSmall)
-                    "seed" -> Text("随机种子，固定可复现结果", style = MaterialTheme.typography.labelSmall)
-                    "top_k" -> Text("Top-K 采样参数，默认 40", style = MaterialTheme.typography.labelSmall)
-                    "temperature" -> Text("控制随机性 (0-2)，默认 0.7", style = MaterialTheme.typography.labelSmall)
-                    "top_p" -> Text("核采样 (0-1)，默认 1.0", style = MaterialTheme.typography.labelSmall)
-                    "max_tokens" -> Text("最大输出 Token，默认 4096", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { if (key.isNotBlank() && value.isNotBlank()) onConfirm(key.trim(), value.trim()) },
-                enabled = key.isNotBlank() && value.isNotBlank() && key !in existingKeys,
-            ) { Text("添加") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
 }
 
 @Composable
