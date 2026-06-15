@@ -95,8 +95,16 @@ class ProviderListViewModel(
                     .readTimeout(15, TimeUnit.SECONDS)
                     .build()
 
-                // 确保 baseUrl 以 /v1 结尾
-                val apiBase = baseUrl.trimEnd('/') + "/models"
+                // 处理 baseUrl：去掉末尾斜杠和 /v1/chat/completions 等路径，只保留基础部分
+                var base = baseUrl.trimEnd('/')
+                // 如果以 /v1 结尾（如 https://api.xxx.com/v1），直接加 /models
+                if (base.endsWith("/v1")) {
+                    base += "/models"
+                } else if (!base.endsWith("/v1/models")) {
+                    // 其他情况追加 /v1/models
+                    base += "/v1/models"
+                }
+                val apiBase = base
                 val request = Request.Builder()
                     .url(apiBase)
                     .apply {

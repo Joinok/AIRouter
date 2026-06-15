@@ -81,14 +81,27 @@ class ProviderRepository(
     }
 
     suspend fun updateProviderConfig(provider: Provider) {
-        providerConfigDao.insertConfig(
-            ProviderConfigEntity(
-                providerId = provider.id,
-                apiKey = provider.apiKey,
-                customBaseUrl = provider.customBaseUrl,
-                enabled = provider.enabled,
+        val existing = providerConfigDao.getConfig(provider.id)
+        if (existing != null) {
+            // 更新现有记录，保留 extra 字段
+            providerConfigDao.insertConfig(
+                existing.copy(
+                    apiKey = provider.apiKey,
+                    customBaseUrl = provider.customBaseUrl,
+                    enabled = provider.enabled,
+                )
             )
-        )
+        } else {
+            // 新记录
+            providerConfigDao.insertConfig(
+                ProviderConfigEntity(
+                    providerId = provider.id,
+                    apiKey = provider.apiKey,
+                    customBaseUrl = provider.customBaseUrl,
+                    enabled = provider.enabled,
+                )
+            )
+        }
     }
 
     suspend fun getProviderConfig(providerId: String): ProviderConfigEntity? {
@@ -170,41 +183,29 @@ class ProviderRepository(
 
     suspend fun saveApiKey(providerId: String, apiKey: String) {
         val existing = providerConfigDao.getConfig(providerId)
-        providerConfigDao.insertConfig(
-            ProviderConfigEntity(
-                providerId = providerId,
-                apiKey = apiKey,
-                customBaseUrl = existing?.customBaseUrl ?: "",
-                enabled = existing?.enabled ?: true,
-                fetchedModelsJson = existing?.fetchedModelsJson,
-            )
-        )
+        if (existing != null) {
+            providerConfigDao.insertConfig(existing.copy(apiKey = apiKey))
+        } else {
+            providerConfigDao.insertConfig(ProviderConfigEntity(providerId = providerId, apiKey = apiKey, customBaseUrl = "", enabled = true))
+        }
     }
 
     suspend fun saveCustomBaseUrl(providerId: String, url: String) {
         val existing = providerConfigDao.getConfig(providerId)
-        providerConfigDao.insertConfig(
-            ProviderConfigEntity(
-                providerId = providerId,
-                apiKey = existing?.apiKey ?: "",
-                customBaseUrl = url,
-                enabled = existing?.enabled ?: true,
-                fetchedModelsJson = existing?.fetchedModelsJson,
-            )
-        )
+        if (existing != null) {
+            providerConfigDao.insertConfig(existing.copy(customBaseUrl = url))
+        } else {
+            providerConfigDao.insertConfig(ProviderConfigEntity(providerId = providerId, apiKey = "", customBaseUrl = url, enabled = true))
+        }
     }
 
     suspend fun setProviderEnabled(providerId: String, enabled: Boolean) {
         val existing = providerConfigDao.getConfig(providerId)
-        providerConfigDao.insertConfig(
-            ProviderConfigEntity(
-                providerId = providerId,
-                apiKey = existing?.apiKey ?: "",
-                customBaseUrl = existing?.customBaseUrl ?: "",
-                enabled = enabled,
-                fetchedModelsJson = existing?.fetchedModelsJson,
-            )
-        )
+        if (existing != null) {
+            providerConfigDao.insertConfig(existing.copy(enabled = enabled))
+        } else {
+            providerConfigDao.insertConfig(ProviderConfigEntity(providerId = providerId, apiKey = "", customBaseUrl = "", enabled = enabled))
+        }
     }
 
     /**
