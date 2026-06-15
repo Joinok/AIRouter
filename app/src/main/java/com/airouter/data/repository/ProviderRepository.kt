@@ -148,6 +148,38 @@ class ProviderRepository(
     }
 
     /**
+     * 更新自定义 Provider 完整配置
+     */
+    suspend fun updateCustomProviderConfig(
+        providerId: String,
+        name: String,
+        apiKey: String,
+        customBaseUrl: String,
+        modelId: String,
+        displayName: String,
+        extraBodyFields: Map<String, String>,
+    ) {
+        val existing = providerConfigDao.getConfig(providerId) ?: return
+        val modelsJson = if (modelId.isNotBlank()) {
+            try {
+                json.encodeToString(
+                    kotlinx.serialization.builtins.ListSerializer(AiModel.serializer()),
+                    listOf(AiModel(modelId = modelId, displayName = displayName.ifBlank { modelId }))
+                )
+            } catch (e: Exception) { null }
+        } else null
+        providerConfigDao.insertConfig(
+            existing.copy(
+                name = name,
+                apiKey = apiKey,
+                customBaseUrl = customBaseUrl,
+                extraBodyFieldsJson = ProviderConfigEntity.serializeExtraParams(extraBodyFields),
+                builtInModelsJson = modelsJson ?: existing.builtInModelsJson,
+            )
+        )
+    }
+
+    /**
      * 保存自定义 Provider 的额外请求体参数
      */
     suspend fun saveExtraBodyFields(providerId: String, params: Map<String, String>) {

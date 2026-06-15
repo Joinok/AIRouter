@@ -131,6 +131,44 @@ class ProviderEditViewModel(
         }
     }
 
+    /**
+     * 完整保存（对话框专用）：更新名称、API Key、Base URL、模型、自定义参数
+     */
+    fun saveFullConfig(
+        name: String,
+        apiKey: String,
+        customBaseUrl: String,
+        modelId: String,
+        displayName: String,
+        extraBodyFields: Map<String, String>,
+    ) {
+        viewModelScope.launch {
+            val provider = _provider.value
+            if (provider?.isCustom == true) {
+                providerRepository.updateCustomProviderConfig(
+                    providerId = providerId,
+                    name = name,
+                    apiKey = apiKey,
+                    customBaseUrl = customBaseUrl,
+                    modelId = modelId,
+                    displayName = displayName,
+                    extraBodyFields = extraBodyFields,
+                )
+            } else {
+                // 内置 Provider 只更新 API Key / Base URL / extraBodyFields
+                providerRepository.updateProviderConfig(
+                    provider?.copy(
+                        apiKey = apiKey,
+                        customBaseUrl = customBaseUrl,
+                        extraBodyFields = extraBodyFields,
+                    ) ?: return@launch
+                )
+                providerRepository.saveExtraBodyFields(providerId, extraBodyFields)
+            }
+            _saved.value = true
+        }
+    }
+
     fun fetchModels() {
         viewModelScope.launch {
             _isFetchingModels.value = true

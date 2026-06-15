@@ -1,7 +1,10 @@
 package com.airouter.ui.screen.provider
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -26,8 +29,8 @@ fun ProviderEditDialog(
     initialModelId: String = "",
     initialDisplayName: String = "",
     initialExtraParams: Map<String, String> = emptyMap(),
-    providerType: ProviderType = ProviderType.OPENAI_COMPATIBLE,
     existingNames: Set<String> = emptySet(),
+    readOnlyFields: Set<String> = emptySet(),
     onDismiss: () -> Unit,
     onConfirm: (name: String, baseUrl: String, apiKey: String, modelId: String, displayName: String, extraParams: Map<String, String>) -> Unit,
     onFetchModels: ((baseUrl: String, apiKey: String, onResult: (Result<List<String>>) -> Unit) -> Unit)? = null,
@@ -47,6 +50,8 @@ fun ProviderEditDialog(
     var showModelPicker by remember { mutableStateOf(false) }
 
     val nameError = name.isBlank() || (name in existingNames && name != initialName)
+    val nameReadOnly = "name" in readOnlyFields
+    val modelReadOnly = "modelId" in readOnlyFields
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -55,7 +60,8 @@ fun ProviderEditDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 500.dp),
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // 名称
@@ -65,9 +71,10 @@ fun ProviderEditDialog(
                     label = { Text("Provider 名称") },
                     placeholder = { Text("如：DeepSeek") },
                     singleLine = true,
+                    readOnly = nameReadOnly,
                     modifier = Modifier.fillMaxWidth(),
-                    isError = nameError,
-                    supportingText = { if (name in existingNames && name != initialName) Text("名称已存在") }
+                    isError = !nameReadOnly && nameError,
+                    supportingText = { if (!nameReadOnly && name in existingNames && name != initialName) Text("名称已存在") }
                 )
 
                 // Base URL
@@ -111,7 +118,8 @@ fun ProviderEditDialog(
                         label = { Text("模型 ID") },
                         placeholder = { Text("如：deepseek-chat") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        readOnly = modelReadOnly,
+                        modifier = Modifier.weight(1f),
                     )
                     if (onFetchModels != null) {
                         Spacer(modifier = Modifier.width(8.dp))
@@ -288,7 +296,7 @@ fun ProviderEditDialog(
                         extraParams
                     )
                 },
-                enabled = name.isNotBlank() && !nameError
+                enabled = nameReadOnly || (name.isNotBlank() && !nameError)
             ) {
                 Text("保存")
             }
