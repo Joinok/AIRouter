@@ -138,9 +138,34 @@ class ProviderRepository(
     }
 
     suspend fun getProviderById(providerId: String): Provider? {
-        val builtIn = BuiltInProviders.all.find { it.id == providerId } ?: return null
-        val config = providerConfigDao.getConfig(providerId)
-        return mergeProvider(builtIn, config)
+        // 先查内置
+        val builtIn = BuiltInProviders.all.find { it.id == providerId }
+        if (builtIn != null) {
+            val config = providerConfigDao.getConfig(providerId)
+            return mergeProvider(builtIn, config)
+        }
+        // 再查自定义
+        val config = providerConfigDao.getConfig(providerId) ?: return null
+        val providerType = try {
+            ProviderType.valueOf(config.providerType!!)
+        } catch (e: Exception) {
+            ProviderType.OPENAI_COMPATIBLE
+        }
+        val models = config.builtInModelsJson?.let {
+            try { json.decodeFromString<List<AiModel>>(it) } catch (e: Exception) { emptyList() }
+        } ?: emptyList()
+        return Provider(
+            id = config.providerId,
+            name = config.name ?: config.providerId,
+            type = providerType,
+            defaultBaseUrl = config.defaultBaseUrl ?: "",
+            isBuiltIn = false,
+            isCustom = true,
+            apiKey = config.apiKey,
+            customBaseUrl = config.customBaseUrl,
+            enabled = config.enabled,
+            supportedModels = models,
+        )
     }
 
     suspend fun saveApiKey(providerId: String, apiKey: String) {
