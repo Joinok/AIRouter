@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -86,7 +87,7 @@ class ProviderListViewModel(
      * 从 OpenAI 兼容端点拉取模型列表（GET /v1/models）
      */
     fun fetchModels(baseUrl: String, apiKey: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             _fetchState.value = FetchState.Loading
             try {
                 val client = OkHttpClient.Builder()
