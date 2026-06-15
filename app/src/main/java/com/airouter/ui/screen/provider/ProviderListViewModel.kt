@@ -35,6 +35,7 @@ class ProviderListViewModel(
         apiKey: String,
         modelId: String,
         displayName: String,
+        extraBodyFields: Map<String, String> = emptyMap(),
     ) {
         viewModelScope.launch {
             val providerId = "custom_${System.currentTimeMillis()}"
@@ -51,7 +52,8 @@ class ProviderListViewModel(
                         modelId = modelId,
                         displayName = displayName,
                     )
-                )
+                ),
+                extraBodyFields = extraBodyFields,
             )
             providerRepository.addCustomProvider(provider)
         }

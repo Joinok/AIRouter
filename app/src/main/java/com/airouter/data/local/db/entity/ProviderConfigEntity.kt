@@ -2,6 +2,8 @@ package com.airouter.data.local.db.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 
 @Entity(tableName = "provider_configs")
 data class ProviderConfigEntity(
@@ -19,4 +21,24 @@ data class ProviderConfigEntity(
     val defaultBaseUrl: String? = null,
     /** 自定义 Provider 的模型列表 JSON */
     val builtInModelsJson: String? = null,
-)
+    /** 自定义额外请求体参数 JSON，格式: {"temperature":"0.7","top_p":"0.9"} */
+    val extraBodyFieldsJson: String? = null,
+) {
+    companion object {
+        private val json = Json { ignoreUnknownKeys = true }
+
+        /** 将 Map 序列化为 JSON 字符串 */
+        fun serializeExtraParams(params: Map<String, String>): String? {
+            if (params.isEmpty()) return null
+            return json.encodeToString(params)
+        }
+
+        /** 将 JSON 字符串反序列化为 Map */
+        fun deserializeExtraParams(jsonStr: String?): Map<String, String> {
+            if (jsonStr.isNullOrBlank()) return emptyMap()
+            return try {
+                json.decodeFromString<Map<String, String>>(jsonStr)
+            } catch (_: Exception) { emptyMap() }
+        }
+    }
+}

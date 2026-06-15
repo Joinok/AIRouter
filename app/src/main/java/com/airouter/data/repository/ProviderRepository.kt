@@ -22,52 +22,20 @@ class ProviderRepository(
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    /**
-     * 获取所有 Provider（内置 + 用户配置 + 自定义）
-     * Flow 会自动响应数据库变化。
-     */
     fun getAllProviders(): Flow<List<Provider>> {
         return providerConfigDao.getAllConfigs().map { configs ->
             val configMap = configs.associateBy { it.providerId }
-            
-            // 内置 Provider 列表
+
             val builtInProviders = BuiltInProviders.all.map { builtIn ->
                 val config = configMap[builtIn.id]
                 mergeProvider(builtIn, config)
             }
-            
-            // 自定义 Provider（数据库中有但不在内置列表中的）
+
             val builtInIds = BuiltInProviders.all.map { it.id }.toSet()
             val customProviders = configs
                 .filter { it.providerId !in builtInIds && it.providerType != null }
-                .map { config ->
-                    val providerType = try {
-                        ProviderType.valueOf(config.providerType!!)
-                    } catch (e: Exception) {
-                        ProviderType.OPENAI_COMPATIBLE
-                    }
-                    val models = config.builtInModelsJson?.let {
-                        try {
-                            json.decodeFromString<List<AiModel>>(it)
-                        } catch (e: Exception) {
-                            emptyList()
-                        }
-                    } ?: emptyList()
-                    
-                    Provider(
-                        id = config.providerId,
-                        name = config.name ?: config.providerId,
-                        type = providerType,
-                        defaultBaseUrl = config.defaultBaseUrl ?: "",
-                        isBuiltIn = false,
-                        isCustom = true,
-                        apiKey = config.apiKey,
-                        customBaseUrl = config.customBaseUrl,
-                        enabled = config.enabled,
-                        supportedModels = models,
-                    )
-                }
-            
+                .map { config -> configToProvider(config) }
+
             builtInProviders + customProviders
         }
     }
@@ -82,35 +50,27 @@ class ProviderRepository(
 
     suspend fun updateProviderConfig(provider: Provider) {
         val existing = providerConfigDao.getConfig(provider.id)
-        if (existing != null) {
-            // 更新现有记录，保留 extra 字段
-            providerConfigDao.insertConfig(
-                existing.copy(
-                    apiKey = provider.apiKey,
-                    customBaseUrl = provider.customBaseUrl,
-                    enabled = provider.enabled,
-                )
+        val entity = if (existing != null) {
+            existing.copy(
+                apiKey = provider.apiKey,
+                customBaseUrl = provider.customBaseUrl,
+                enabled = provider.enabled,
             )
         } else {
-            // 新记录
-            providerConfigDao.insertConfig(
-                ProviderConfigEntity(
-                    providerId = provider.id,
-                    apiKey = provider.apiKey,
-                    customBaseUrl = provider.customBaseUrl,
-                    enabled = provider.enabled,
-                )
+            ProviderConfigEntity(
+                providerId = provider.id,
+                apiKey = provider.apiKey,
+                customBaseUrl = provider.customBaseUrl,
+                enabled = provider.enabled,
             )
         }
+        providerConfigDao.insertConfig(entity)
     }
 
     suspend fun getProviderConfig(providerId: String): ProviderConfigEntity? {
         return providerConfigDao.getConfig(providerId)
     }
 
-    /**
-     * 添加自定义 Provider
-     */
     suspend fun addCustomProvider(provider: Provider) {
         val modelsJson = if (provider.supportedModels.isNotEmpty()) {
             try {
@@ -124,7 +84,7 @@ class ProviderRepository(
         } else {
             null
         }
-        
+
         providerConfigDao.insertConfig(
             ProviderConfigEntity(
                 providerId = provider.id,
@@ -136,13 +96,11 @@ class ProviderRepository(
                 providerType = provider.type.name,
                 defaultBaseUrl = provider.defaultBaseUrl,
                 builtInModelsJson = modelsJson,
+                extraBodyFieldsJson = ProviderConfigEntity.serializeExtraParams(provider.extraBodyFields),
             )
         )
     }
 
-    /**
-     * 删除自定义 Provider
-     */
     suspend fun deleteCustomProvider(providerId: String) {
         val config = providerConfigDao.getConfig(providerId)
         if (config != null) {
@@ -159,26 +117,7 @@ class ProviderRepository(
         }
         // 再查自定义
         val config = providerConfigDao.getConfig(providerId) ?: return null
-        val providerType = try {
-            ProviderType.valueOf(config.providerType!!)
-        } catch (e: Exception) {
-            ProviderType.OPENAI_COMPATIBLE
-        }
-        val models = config.builtInModelsJson?.let {
-            try { json.decodeFromString<List<AiModel>>(it) } catch (e: Exception) { emptyList() }
-        } ?: emptyList()
-        return Provider(
-            id = config.providerId,
-            name = config.name ?: config.providerId,
-            type = providerType,
-            defaultBaseUrl = config.defaultBaseUrl ?: "",
-            isBuiltIn = false,
-            isCustom = true,
-            apiKey = config.apiKey,
-            customBaseUrl = config.customBaseUrl,
-            enabled = config.enabled,
-            supportedModels = models,
-        )
+        return configToProvider(config)
     }
 
     suspend fun saveApiKey(providerId: String, apiKey: String) {
@@ -209,9 +148,15 @@ class ProviderRepository(
     }
 
     /**
-     * 从 /models 接口拉取模型列表并保存到数据库。
-     * 返回拉取到的模型列表，失败返回 null。
+     * 保存自定义 Provider 的额外请求体参数
      */
+    suspend fun saveExtraBodyFields(providerId: String, params: Map<String, String>) {
+        val existing = providerConfigDao.getConfig(providerId) ?: return
+        providerConfigDao.insertConfig(
+            existing.copy(extraBodyFieldsJson = ProviderConfigEntity.serializeExtraParams(params))
+        )
+    }
+
     suspend fun fetchModels(provider: Provider, client: OkHttpClient): List<AiModel> {
         return withContext(Dispatchers.IO) {
             doFetchModels(provider, client)
@@ -219,7 +164,6 @@ class ProviderRepository(
     }
 
     private suspend fun doFetchModels(provider: Provider, client: OkHttpClient): List<AiModel> {
-        // 清空内置列表，强制走 API 拉取
         val providerWithoutBuiltIn = provider.copy(supportedModels = emptyList())
         val apiProvider = ProviderFactory.create(
             providerWithoutBuiltIn.copy(
@@ -232,7 +176,6 @@ class ProviderRepository(
         try {
             val models = apiProvider.listModels()
             if (models.isNotEmpty()) {
-                // 保存到数据库
                 val existing = providerConfigDao.getConfig(provider.id)
                 val modelsJson = json.encodeToString(
                     kotlinx.serialization.builtins.ListSerializer(AiModel.serializer()),
@@ -245,22 +188,16 @@ class ProviderRepository(
                         customBaseUrl = existing?.customBaseUrl ?: provider.customBaseUrl,
                         enabled = existing?.enabled ?: true,
                         fetchedModelsJson = modelsJson,
+                        extraBodyFieldsJson = existing?.extraBodyFieldsJson,
                     )
                 )
             }
             return models
         } catch (e: Exception) {
-            // /models 接口不支持（404 或其他错误），静默回退到空列表
-            // 调用方通过判断 isEmpty() 来决定是否使用内置模型
             return emptyList()
         }
     }
 
-    /**
-     * 合并内置 Provider 与数据库配置。
-     * 模型列表：优先用 fetchedModels，否则用内置 supportedModels。
-     * 自定义 Provider 直接从数据库读取完整配置。
-     */
     private fun mergeProvider(builtIn: Provider, config: ProviderConfigEntity?): Provider {
         val fetchedModels = config?.fetchedModelsJson?.let {
             try {
@@ -270,14 +207,11 @@ class ProviderRepository(
             }
         }
 
-        // 合并逻辑：fetchedModels 为主，内置模型作为补充（如果 fetched 中没有对应 modelId 则保留内置的）
         val finalModels = if (fetchedModels != null && fetchedModels.isNotEmpty()) {
             val fetchedIds = fetchedModels.map { m -> m.modelId }.toSet()
-            // 把内置模型中有额外信息（价格、上下文长度、视觉支持等）的合并进去
             val merged = fetchedModels.map { fm ->
                 val builtInMatch = builtIn.supportedModels.find { it.modelId == fm.modelId }
                 if (builtInMatch != null) {
-                    // 用内置的信息补充 fetched 的（内置有价格等详细参数）
                     fm.copy(
                         displayName = if (fm.displayName == fm.modelId) builtInMatch.displayName else fm.displayName,
                         contextLength = if (fm.contextLength == 8192 && builtInMatch.contextLength != 8192) builtInMatch.contextLength else fm.contextLength,
@@ -302,6 +236,31 @@ class ProviderRepository(
             customBaseUrl = config?.customBaseUrl ?: "",
             enabled = config?.enabled ?: true,
             supportedModels = finalModels,
+        )
+    }
+
+    /** 把数据库配置转为自定义 Provider */
+    private fun configToProvider(config: ProviderConfigEntity): Provider {
+        val providerType = try {
+            ProviderType.valueOf(config.providerType!!)
+        } catch (e: Exception) {
+            ProviderType.OPENAI_COMPATIBLE
+        }
+        val models = config.builtInModelsJson?.let {
+            try { json.decodeFromString<List<AiModel>>(it) } catch (e: Exception) { emptyList() }
+        } ?: emptyList()
+        return Provider(
+            id = config.providerId,
+            name = config.name ?: config.providerId,
+            type = providerType,
+            defaultBaseUrl = config.defaultBaseUrl ?: "",
+            isBuiltIn = false,
+            isCustom = true,
+            apiKey = config.apiKey,
+            customBaseUrl = config.customBaseUrl,
+            enabled = config.enabled,
+            supportedModels = models,
+            extraBodyFields = ProviderConfigEntity.deserializeExtraParams(config.extraBodyFieldsJson),
         )
     }
 }

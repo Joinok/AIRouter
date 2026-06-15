@@ -1,8 +1,12 @@
 package com.airouter.ui.screen.provider
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -79,8 +83,8 @@ fun ProviderListScreen(
     if (showAddDialog) {
         AddProviderDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, baseUrl, apiKey, modelId, displayName ->
-                viewModel.addCustomProvider(name, baseUrl, apiKey, modelId, displayName)
+            onConfirm = { name, baseUrl, apiKey, modelId, displayName, extraBodyFields ->
+                viewModel.addCustomProvider(name, baseUrl, apiKey, modelId, displayName, extraBodyFields)
                 showAddDialog = false
             }
         )
@@ -131,7 +135,6 @@ private fun ProviderCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 状态图标
             Icon(
                 imageVector = if (provider.isConfigured) {
                     Icons.Default.CheckCircle
@@ -156,7 +159,8 @@ private fun ProviderCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 if (provider.isConfigured) {
                     Text(
-                        text = "已配置 · ${provider.supportedModels.size} 个模型",
+                        text = "已配置 · ${provider.supportedModels.size} 个模型" +
+                            if (provider.extraBodyFields.isNotEmpty()) " · ${provider.extraBodyFields.size} 个自定义参数" else "",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -169,7 +173,6 @@ private fun ProviderCard(
                 }
             }
 
-            // 删除按钮（仅自定义 Provider）
             if (onDelete != null) {
                 IconButton(onClick = onDelete) {
                     Icon(
@@ -193,7 +196,7 @@ private fun ProviderCard(
 @Composable
 fun AddProviderDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, baseUrl: String, apiKey: String, modelId: String, displayName: String) -> Unit,
+    onConfirm: (name: String, baseUrl: String, apiKey: String, modelId: String, displayName: String, extraBodyFields: Map<String, String>) -> Unit,
     viewModel: ProviderListViewModel = koinViewModel(),
 ) {
     var name by remember { mutableStateOf("") }
@@ -202,6 +205,11 @@ fun AddProviderDialog(
     var modelId by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
     var showApiKey by remember { mutableStateOf(false) }
+
+    // 额外参数
+    var extraParams by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var showExtraParams by remember { mutableStateOf(false) }
+    var showAddParamDialog by remember { mutableStateOf(false) }
 
     // 模型拉取状态
     val fetchState by viewModel.fetchState.collectAsState()
@@ -212,7 +220,10 @@ fun AddProviderDialog(
         title = { Text("添加自定义 Provider") },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // 名称
@@ -243,9 +254,9 @@ fun AddProviderDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     visualTransformation = if (showApiKey) {
-                        androidx.compose.ui.text.input.VisualTransformation.None
+                        VisualTransformation.None
                     } else {
-                        androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        PasswordVisualTransformation()
                     },
                     trailingIcon = {
                         IconButton(onClick = { showApiKey = !showApiKey }) {
@@ -302,6 +313,90 @@ fun AddProviderDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                // === 自定义可选参数 ===
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showExtraParams = !showExtraParams }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "自定义请求参数",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (extraParams.isNotEmpty()) {
+                        Text(
+                            text = "${extraParams.size} 项",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Icon(
+                        imageVector = if (showExtraParams) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (showExtraParams) "收起" else "展开",
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                AnimatedVisibility(visible = showExtraParams) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "这些参数会作为额外字段附加到 API 请求体中",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        extraParams.forEach { (key, value) ->
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = key,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                        Text(
+                                            text = value,
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            extraParams = extraParams - key
+                                        },
+                                        modifier = Modifier.size(28.dp),
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "删除", modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = { showAddParamDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("添加参数")
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -313,7 +408,8 @@ fun AddProviderDialog(
                             baseUrl,
                             apiKey,
                             modelId.ifBlank { "default" },
-                            displayName.ifBlank { modelId }
+                            displayName.ifBlank { modelId },
+                            extraParams,
                         )
                     }
                 },
@@ -347,11 +443,92 @@ fun AddProviderDialog(
             }
         )
     }
+
+    // 添加参数对话框
+    if (showAddParamDialog) {
+        AddParamMiniDialog(
+            existingKeys = extraParams.keys,
+            onDismiss = { showAddParamDialog = false },
+            onConfirm = { key, value ->
+                extraParams = extraParams + (key to value)
+                showAddParamDialog = false
+            }
+        )
+    }
 }
 
 /**
- * 模型选择弹窗 - 显示从 API 拉取的模型列表
+ * 简易的添加参数对话框（用于添加 Provider 时使用）
  */
+@Composable
+private fun AddParamMiniDialog(
+    existingKeys: Set<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (key: String, value: String) -> Unit,
+) {
+    var key by remember { mutableStateOf("") }
+    var value by remember { mutableStateOf("") }
+
+    val presets = listOf("frequency_penalty", "presence_penalty", "seed", "top_k")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("请求参数") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    label = { Text("参数名") },
+                    placeholder = { Text("如：frequency_penalty") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = key in existingKeys,
+                    supportingText = { if (key in existingKeys) Text("该参数已存在") }
+                )
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    label = { Text("参数值") },
+                    placeholder = { Text("如：0.5") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                val availablePresets = presets.filter { it !in existingKeys }
+                if (availablePresets.isNotEmpty()) {
+                    Text("快捷填入：", style = MaterialTheme.typography.labelSmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        availablePresets.take(4).forEach { preset ->
+                            AssistChip(
+                                onClick = { key = preset },
+                                label = { Text(preset, style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
+                }
+
+                when (key) {
+                    "frequency_penalty" -> Text("频率惩罚 (-2~2)，默认 0", style = MaterialTheme.typography.labelSmall)
+                    "presence_penalty" -> Text("存在惩罚 (-2~2)，默认 0", style = MaterialTheme.typography.labelSmall)
+                    "seed" -> Text("随机种子，固定可复现结果", style = MaterialTheme.typography.labelSmall)
+                    "top_k" -> Text("Top-K 采样参数，默认 40", style = MaterialTheme.typography.labelSmall)
+                    "temperature" -> Text("控制随机性 (0-2)，默认 0.7", style = MaterialTheme.typography.labelSmall)
+                    "top_p" -> Text("核采样 (0-1)，默认 1.0", style = MaterialTheme.typography.labelSmall)
+                    "max_tokens" -> Text("最大输出 Token，默认 4096", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (key.isNotBlank() && value.isNotBlank()) onConfirm(key.trim(), value.trim()) },
+                enabled = key.isNotBlank() && value.isNotBlank() && key !in existingKeys,
+            ) { Text("添加") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
 @Composable
 private fun ModelPickerDialog(
     fetchState: ProviderListViewModel.FetchState,
@@ -371,7 +548,6 @@ private fun ModelPickerDialog(
             .heightIn(max = 400.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 搜索框
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it; filterText = it },
@@ -389,9 +565,7 @@ private fun ModelPickerDialog(
                                 .fillMaxWidth()
                                 .height(200.dp),
                             contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
+                        ) { CircularProgressIndicator() }
                     }
                     is ProviderListViewModel.FetchState.Error -> {
                         Box(
@@ -401,11 +575,7 @@ private fun ModelPickerDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.Error,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                )
+                                Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = (fetchState as ProviderListViewModel.FetchState.Error).message,
@@ -422,16 +592,11 @@ private fun ModelPickerDialog(
 
                         if (filteredModels.isEmpty()) {
                             Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(150.dp),
+                                modifier = Modifier.fillMaxWidth().height(150.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    "无匹配模型",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Text("无匹配模型", style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else {
                             LazyColumn(
@@ -443,44 +608,26 @@ private fun ModelPickerDialog(
                                     Card(
                                         onClick = { onModelSelected(model.id) },
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                                        ),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                                     ) {
                                         Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(12.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(12.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = model.id,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    maxLines = 1,
-                                                )
+                                                Text(text = model.id, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
                                                 if (model.ownedBy.isNotBlank()) {
-                                                    Text(
-                                                        text = model.ownedBy,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    )
+                                                    Text(text = model.ownedBy, style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                             }
-                                            Icon(
-                                                Icons.Default.ChevronRight,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(16.dp),
-                                            )
+                                            Icon(Icons.Default.ChevronRight, contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                                         }
                                     }
                                 }
                             }
                         }
-
-                        // 底部统计
-                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "共 ${filteredModels.size} / ${models.size} 个模型",
                             style = MaterialTheme.typography.labelSmall,
@@ -492,10 +639,6 @@ private fun ModelPickerDialog(
             }
         },
         confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("关闭")
-            }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
     )
 }

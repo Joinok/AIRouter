@@ -11,6 +11,8 @@ data class Provider(
     val apiKey: String = "",
     val customBaseUrl: String = "",
     val supportedModels: List<AiModel> = emptyList(),
+    /** 用户自定义的额外请求体参数（key-value），如 temperature、top_p 等 */
+    val extraBodyFields: Map<String, String> = emptyMap(),
     /** 是否支持 stream_options.include_usage（部分厂商如 Moonshot 不支持，传了会 400） */
     val supportsStreamOptions: Boolean = true,
 ) {

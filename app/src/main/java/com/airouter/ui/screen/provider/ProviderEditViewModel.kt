@@ -47,6 +47,10 @@ class ProviderEditViewModel(
 
     private val _fetchedModels = MutableStateFlow<List<AiModel>?>(null)
 
+    /** 额外请求体参数 */
+    private val _extraBodyFields = MutableStateFlow<Map<String, String>>(emptyMap())
+    val extraBodyFields: StateFlow<Map<String, String>> = _extraBodyFields.asStateFlow()
+
     val models: StateFlow<List<AiModel>> = combine(_provider, _fetchedModels) { provider, fetched ->
         fetched ?: provider?.supportedModels ?: emptyList()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -57,6 +61,7 @@ class ProviderEditViewModel(
             _provider.value = provider
             _apiKey.value = provider?.apiKey ?: ""
             _customBaseUrl.value = provider?.customBaseUrl ?: ""
+            _extraBodyFields.value = provider?.extraBodyFields ?: emptyMap()
         }
     }
 
@@ -83,7 +88,6 @@ class ProviderEditViewModel(
                 ) ?: return@launch
 
                 kotlinx.coroutines.delay(1000)
-                // TODO: 实际调用 provider.validateApiKey()
                 _validationResult.value = _apiKey.value.isNotBlank()
             } catch (e: Exception) {
                 _validationResult.value = false
@@ -93,22 +97,40 @@ class ProviderEditViewModel(
         }
     }
 
+    /** 添加或更新一个额外参数 */
+    fun upsertExtraParam(key: String, value: String) {
+        val current = _extraBodyFields.value.toMutableMap()
+        if (value.isBlank()) {
+            current.remove(key)
+        } else {
+            current[key] = value
+        }
+        _extraBodyFields.value = current
+    }
+
+    /** 删除一个额外参数 */
+    fun removeExtraParam(key: String) {
+        val current = _extraBodyFields.value.toMutableMap()
+        current.remove(key)
+        _extraBodyFields.value = current
+    }
+
     fun save() {
         viewModelScope.launch {
             val provider = _provider.value?.copy(
                 apiKey = _apiKey.value,
                 customBaseUrl = _customBaseUrl.value,
                 enabled = _apiKey.value.isNotBlank(),
+                extraBodyFields = _extraBodyFields.value,
             ) ?: return@launch
 
             providerRepository.updateProviderConfig(provider)
+            // 保存自定义参数
+            providerRepository.saveExtraBodyFields(providerId, _extraBodyFields.value)
             _saved.value = true
         }
     }
 
-    /**
-     * 从 /models 接口拉取最新模型列表
-     */
     fun fetchModels() {
         viewModelScope.launch {
             _isFetchingModels.value = true
@@ -130,21 +152,18 @@ class ProviderEditViewModel(
                 val result = providerRepository.fetchModels(provider, okHttpClient)
                 if (result.isNotEmpty()) {
                     _fetchedModels.value = result
-                    // 同时刷新 provider 引用
                     val updated = providerRepository.getProviderById(providerId)
                     _provider.value = updated
                 } else {
-                    // /models 接口不支持，返回空列表 → 静默用内置模型，不弹错误
                     val builtInCount = provider.supportedModels.size
                     if (builtInCount > 0) {
-                        _fetchedModels.value = emptyList() // 触发用内置模型
+                        _fetchedModels.value = emptyList()
                     } else {
                         _fetchModelsError.value = "API 返回模型列表为空，且无内置模型"
                     }
                 }
             } catch (e: Exception) {
                 val errorMsg = e.message ?: e::class.simpleName ?: "未知错误"
-                // 如果拉取失败但内置有模型，显示提示但不阻断
                 val builtInCount = _provider.value?.supportedModels?.size ?: 0
                 if (builtInCount > 0) {
                     _fetchModelsError.value = "动态拉取失败（$errorMsg），使用内置 ${builtInCount} 个模型"

@@ -17,7 +17,7 @@ import com.airouter.data.local.db.entity.SessionEntity
         MessageEntity::class,
         ProviderConfigEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -64,6 +64,15 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE provider_configs ADD COLUMN providerType TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE provider_configs ADD COLUMN defaultBaseUrl TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE provider_configs ADD COLUMN builtInModelsJson TEXT DEFAULT NULL")
+            }
+        }
+
+        /**
+         * v6 → v7: 添加自定义参数支持
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE provider_configs ADD COLUMN extraBodyFieldsJson TEXT DEFAULT NULL")
             }
         }
     }

@@ -20,6 +20,8 @@ import com.airouter.domain.provider.AIProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -40,6 +42,32 @@ class OpenAiCompatibleProvider(
 
     private val baseUrl = provider.effectiveBaseUrl.trimEnd('/')
     private val apiKey = provider.apiKey
+
+    /**
+     * 将自定义额外参数合并到请求 JSON 中。
+     * 先序列化 OpenAiChatRequest，再以 JsonObject 形式 merge extraBodyFields。
+     */
+    private fun buildRequestBody(openAiRequest: OpenAiChatRequest, extraFields: Map<String, String>): String {
+        val baseJson = json.encodeToString(OpenAiChatRequest.serializer(), openAiRequest)
+        if (extraFields.isEmpty()) return baseJson
+
+        return try {
+            val obj = json.parseToJsonElement(baseJson).jsonObject
+            val merged = buildJsonObject {
+                obj.forEach { (key, value) -> put(key, value) }
+                extraFields.forEach { (key, value) ->
+                    // 跳过已经存在的标准字段（避免重复）
+                    if (!obj.containsKey(key)) {
+                        put(key, JsonPrimitive(value))
+                    }
+                }
+            }
+            json.encodeToString(JsonObject.serializer(), merged)
+        } catch (e: Exception) {
+            Log.w("OpenAiCompat", "Failed to merge extra fields: ${e.message}")
+            baseJson
+        }
+    }
 
     override suspend fun listModels(): List<AiModel> {
         // 如果内置了模型列表，直接返回
@@ -107,7 +135,8 @@ class OpenAiCompatibleProvider(
             stream_options = if (provider.supportsStreamOptions) StreamOptions() else null,
         )
 
-        val body = json.encodeToString(OpenAiChatRequest.serializer(), openAiRequest)
+        // 构建请求体 JSON（含自定义额外参数）
+        val body = buildRequestBody(openAiRequest, provider.extraBodyFields)
         DebugLog.log("API", "POST $baseUrl/chat/completions")
         DebugLog.log("API", "Request body: ${body.take(500)}")
         Log.d("OpenAiCompat", "SSE request body: $body")
@@ -163,7 +192,7 @@ class OpenAiCompatibleProvider(
             stream = false,
         )
 
-        val body = json.encodeToString(OpenAiChatRequest.serializer(), openAiRequest)
+        val body = buildRequestBody(openAiRequest, provider.extraBodyFields)
 
         val httpRequest = Request.Builder()
             .url("$baseUrl/chat/completions")
@@ -235,15 +264,12 @@ class OpenAiCompatibleProvider(
             val content = when {
                 imageAttachments.isNotEmpty() || fileAttachments.isNotEmpty() -> {
                     val parts = mutableListOf<ContentPart>()
-                    // 图片附件：localPath 已在 ChatViewModel 中替换为 data URL
                     for (img in imageAttachments) {
                         parts.add(ContentPart.ImageUrlPart(img.localPath))
                     }
-                    // 非图片文件：作为文本提示发送（大部分模型不支持非图片文件，告知用户文件名即可）
                     val fileHints = fileAttachments.mapNotNull { file ->
                         if (file.fileName.isNotBlank()) "[附件: ${file.fileName} (${formatFileSize(file.fileSize)})]" else null
                     }
-                    // 文本内容 + 文件提示
                     val textContent = buildString {
                         if (msg.content.isNotBlank()) append(msg.content)
                         if (fileHints.isNotEmpty()) {
