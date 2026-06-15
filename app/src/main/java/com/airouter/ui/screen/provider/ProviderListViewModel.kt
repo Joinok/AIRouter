@@ -155,4 +155,61 @@ class ProviderListViewModel(
     fun clearFetchState() {
         _fetchState.value = FetchState.Idle
     }
+
+    /**
+     * 带回调的模型拉取方法（供 ProviderEditDialog 使用）
+     */
+    fun fetchModelsWithCallback(
+        baseUrl: String,
+        apiKey: String,
+        callback: (Result<List<String>>) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(15, TimeUnit.SECONDS)
+                    .build()
+
+                var base = baseUrl.trimEnd('/')
+                if (base.endsWith("/v1")) {
+                    base += "/models"
+                } else if (!base.endsWith("/v1/models")) {
+                    base += "/v1/models"
+                }
+
+                val request = Request.Builder()
+                    .url(base)
+                    .apply {
+                        if (apiKey.isNotBlank()) {
+                            addHeader("Authorization", "Bearer $apiKey")
+                        }
+                    }
+                    .get()
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string() ?: ""
+
+                if (!response.isSuccessful) {
+                    callback(Result.failure(Exception("HTTP ${response.code}")))
+                    return@launch
+                }
+
+                val json = JSONObject(body)
+                val dataArray = json.optJSONArray("data") ?: run {
+                    callback(Result.failure(Exception("返回格式异常")))
+                    return@launch
+                }
+
+                val models = (0 until dataArray.length()).map { i ->
+                    dataArray.getJSONObject(i).optString("id", "")
+                }.filter { it.isNotBlank() }
+
+                callback(Result.success(models))
+            } catch (e: Exception) {
+                callback(Result.failure(e))
+            }
+        }
+    }
 }
